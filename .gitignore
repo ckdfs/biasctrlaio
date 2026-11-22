@@ -13,6 +13,8 @@ __pycache__/
 *.py[cod]
 scripts/env.local.sh
 scripts/env.sh
+scripts/env.local.ps1
+scripts/env.ps1
 
 # OS / editor noise
 .DS_Store
