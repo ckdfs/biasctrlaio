@@ -1,6 +1,6 @@
 # Tasks: Phase 1 — STM32H503CBT6 Digital Baseboard Bring-Up
 
-- [ ] p1_board_def Create Zephyr out-of-tree board definition for STM32H503CBT6 (`biasctrl_h503`)
+- [x] p1_board_def Create Zephyr out-of-tree board definition for STM32H503CBT6 (`biasctrl_h503`)
   owned: boards/xidian/biasctrl_h503/
   depends:
   verify: test -f boards/xidian/biasctrl_h503/biasctrl_h503.dts && test -f boards/xidian/biasctrl_h503/board.yml
