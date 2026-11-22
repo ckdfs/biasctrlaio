@@ -25,9 +25,13 @@ def resolve_size_tool(explicit_tool: str | None) -> str:
 
     sdk_dir = os.environ.get("ZEPHYR_SDK_INSTALL_DIR")
     if sdk_dir:
-        sdk_size = Path(sdk_dir) / "arm-zephyr-eabi" / "bin" / "arm-zephyr-eabi-size"
-        if sdk_size.is_file():
-            return str(sdk_size)
+        for rel in (
+            Path("gnu") / "arm-zephyr-eabi" / "bin" / "arm-zephyr-eabi-size",
+            Path("arm-zephyr-eabi") / "bin" / "arm-zephyr-eabi-size",
+        ):
+            sdk_size = Path(sdk_dir) / rel
+            if sdk_size.is_file():
+                return str(sdk_size)
 
     for candidate in ("arm-zephyr-eabi-size", "arm-none-eabi-size"):
         found = shutil.which(candidate)
