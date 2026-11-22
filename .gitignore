@@ -1,0 +1,20 @@
+# Zephyr workspace & build artifacts
+.west/
+deps/
+build/
+build-*/
+
+# Local Python / toolchain / bridge state
+.venv/
+.toolchain/
+.agent-bridge/
+.pytest_cache/
+__pycache__/
+*.py[cod]
+scripts/env.local.sh
+scripts/env.sh
+
+# OS / editor noise
+.DS_Store
+*.swp
+*.swo

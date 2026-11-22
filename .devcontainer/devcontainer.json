@@ -1,0 +1,14 @@
+{
+  "name": "biasctrlaio-zephyr",
+  "image": "ghcr.io/zephyrproject-rtos/ci:latest",
+  "postCreateCommand": "./scripts/bootstrap.sh",
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-vscode.cpptools",
+        "ms-vscode.cmake-tools",
+        "marus25.cortex-debug"
+      ]
+    }
+  }
+}

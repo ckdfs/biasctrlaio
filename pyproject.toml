@@ -1,0 +1,19 @@
+[project]
+name = "biasctrlaio"
+version = "0.1.0"
+description = "Zephyr-based split-board electro-optic modulator bias controller"
+requires-python = ">=3.11"
+dependencies = [
+    "west>=1.2.0",
+    "pyocd>=0.36.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0.0",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests/host"]
+cache_dir = ".agent-bridge/.pytest_cache"
+addopts = "--basetemp=.agent-bridge/pytest_tmp"
