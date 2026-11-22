@@ -10,7 +10,7 @@
   depends: p1_board_def
   verify: bash -c 'source scripts/env.sh && west build -b biasctrl_h503 -d build/h503_bringup app --pristine && python3 scripts/check_mem_budget.py --elf build/h503_bringup/zephyr/zephyr.elf'
 
-- [ ] p1_hw_verify Flash and verify Bring-Up firmware on connected STM32H503CBT6 hardware (human-gated)
+- [x] p1_hw_verify Flash and verify Bring-Up firmware on connected STM32H503CBT6 hardware (human-gated)
   owned: docs/bringup/
   depends: p1_bringup_app
   verify: bash -c 'source scripts/env.sh && west flash -d build/h503_bringup'

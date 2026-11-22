@@ -20,6 +20,6 @@
   - `USART1` (`PA9/PA10`) console output via onboard `STM32F042` VCP
   - `I2C1` (`PB8/PB7`) ACK at `0x3C` (`OLED1`) and `0x50` (`U21` `P24C02A` over `FPC2`)
 
-## Pending Human Visual / Tactile Checks
-- [ ] Confirm `LED1` (`PC13`) blinks steadily at `1 Hz` (`500 ms` toggle)
-- [ ] Toggle/press `U18` (`KEY1`, `KEY2`, `KEY3`) and confirm serial console prints `KEY1 pressed` / `KEY2 pressed` / `KEY3 pressed`
+## Human Visual / Tactile Verification (Confirmed 2026-11-22)
+- [x] Confirm `LED1` (`PC13`) blinks steadily at `1 Hz` (`500 ms` toggle) — Confirmed by user
+- [x] Toggle/press `U18` (`KEY1`, `KEY2`, `KEY3`) and confirm serial console prints `KEY1 pressed` / `KEY2 pressed` / `KEY3 pressed` — Confirmed by user (software 20 ms debounce scheduled in Phase 2/5)
