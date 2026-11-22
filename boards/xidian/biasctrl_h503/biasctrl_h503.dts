@@ -1,0 +1,131 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+
+/dts-v1/;
+#include <st/h5/stm32h503Xb.dtsi>
+#include <st/h5/stm32h503cbtx-pinctrl.dtsi>
+#include <zephyr/dt-bindings/input/input-event-codes.h>
+
+/ {
+	model = "Xidian Bias Controller Digital Baseboard";
+	compatible = "xidian,biasctrl-h503";
+
+	chosen {
+		zephyr,console = &usart1;
+		zephyr,shell-uart = &usart1;
+		zephyr,sram = &sram0;
+		zephyr,flash = &flash0;
+	};
+
+	aliases {
+		led0 = &led1;
+		sw0 = &key1;
+		sw1 = &key2;
+		sw2 = &key3;
+	};
+
+	leds {
+		compatible = "gpio-leds";
+
+		led1: led-1 {
+			gpios = <&gpioc 13 GPIO_ACTIVE_HIGH>;
+			label = "LED1";
+		};
+	};
+
+	keys {
+		compatible = "gpio-keys";
+
+		key1: key-1 {
+			gpios = <&gpiob 3 (GPIO_PULL_UP | GPIO_ACTIVE_LOW)>;
+			zephyr,code = <INPUT_KEY_1>;
+			label = "KEY1";
+		};
+		key2: key-2 {
+			gpios = <&gpiob 4 (GPIO_PULL_UP | GPIO_ACTIVE_LOW)>;
+			zephyr,code = <INPUT_KEY_2>;
+			label = "KEY2";
+		};
+		key3: key-3 {
+			gpios = <&gpiob 5 (GPIO_PULL_UP | GPIO_ACTIVE_LOW)>;
+			zephyr,code = <INPUT_KEY_3>;
+			label = "KEY3";
+		};
+	};
+
+	zephyr,user {
+		pilot-sw-gpios = <&gpioa 0 GPIO_ACTIVE_HIGH>,
+				 <&gpioa 1 GPIO_ACTIVE_HIGH>,
+				 <&gpioa 2 GPIO_ACTIVE_HIGH>,
+				 <&gpioa 3 GPIO_ACTIVE_HIGH>,
+				 <&gpioa 4 GPIO_ACTIVE_HIGH>,
+				 <&gpioa 6 GPIO_ACTIVE_HIGH>,
+				 <&gpioa 15 GPIO_ACTIVE_HIGH>,
+				 <&gpiob 6 GPIO_ACTIVE_HIGH>;
+		spare-pa8-gpios = <&gpioa 8 GPIO_ACTIVE_HIGH>;
+		dac-clr-gpios = <&gpiob 0 GPIO_ACTIVE_LOW>;
+		dac-sync-gpios = <&gpiob 1 GPIO_ACTIVE_LOW>;
+		dac-ldac-gpios = <&gpiob 2 GPIO_ACTIVE_LOW>;
+		adc-cs-gpios = <&gpiob 12 GPIO_ACTIVE_LOW>;
+		adc-sync-gpios = <&gpioa 12 GPIO_ACTIVE_LOW>;
+		adc-drdy-gpios = <&gpioa 11 GPIO_ACTIVE_LOW>;
+	};
+};
+
+&clk_hse {
+	clock-frequency = <DT_FREQ_M(8)>;
+	status = "okay";
+};
+
+&pll {
+	clocks = <&clk_hse>;
+	div-m = <2>;
+	mul-n = <125>;
+	div-p = <2>;
+	div-q = <2>;
+	div-r = <2>;
+	status = "okay";
+};
+
+&rcc {
+	clocks = <&pll>;
+	clock-frequency = <DT_FREQ_M(250)>;
+	ahb-prescaler = <1>;
+	apb1-prescaler = <1>;
+	apb2-prescaler = <1>;
+	apb3-prescaler = <1>;
+};
+
+&usart1 {
+	pinctrl-0 = <&usart1_tx_pa9 &usart1_rx_pa10>;
+	pinctrl-names = "default";
+	current-speed = <115200>;
+	status = "okay";
+};
+
+&i2c1 {
+	pinctrl-0 = <&i2c1_scl_pb8 &i2c1_sda_pb7>;
+	pinctrl-names = "default";
+	clock-frequency = <I2C_BITRATE_FAST>;
+	status = "okay";
+};
+
+/* FPC2 SPI signals use low slew when a later application enables the buses. */
+&spi1_sck_pa5 {
+	slew-rate = "low-speed";
+};
+
+&spi1_mosi_pa7 {
+	slew-rate = "low-speed";
+};
+
+&spi2_sck_pb13 {
+	slew-rate = "low-speed";
+};
+
+&spi2_miso_pb14 {
+	slew-rate = "low-speed";
+};
+
+&spi2_mosi_pb15 {
+	slew-rate = "low-speed";
+};

@@ -1,0 +1,6 @@
+board:
+  name: biasctrl_h503
+  full_name: Xidian Bias Controller Digital Baseboard
+  vendor: xidian
+  socs:
+    - name: stm32h503xx

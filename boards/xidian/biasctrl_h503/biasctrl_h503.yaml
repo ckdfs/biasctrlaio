@@ -1,0 +1,13 @@
+identifier: biasctrl_h503
+name: Xidian Bias Controller Digital Baseboard
+type: mcu
+arch: arm
+toolchain:
+  - zephyr
+ram: 32
+flash: 128
+supported:
+  - gpio
+  - uart
+  - i2c
+vendor: xidian
