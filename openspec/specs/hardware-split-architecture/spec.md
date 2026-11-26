@@ -1,6 +1,6 @@
 # Hardware Split Architecture Specification
 
-## Overview
+## Purpose
 All firmware targets the split two-board hardware architecture:
 - **Digital Controller Baseboard** (`20261110-底板`, currently populated with `STM32H503CBT6` LQFP48)
 - **Analog Daughterboard** (`20261110-MZM`, interconnected via 30-pin `FPC2`)
@@ -35,7 +35,15 @@ The `20261110-MZM` daughterboard separates DC bias generation from AC pilot tone
   - `DITHER1` routes to `VA` (`PA0`), `VB` (`PA1`), `VD` (`PA4`), `VE` (`PA6`).
   - `DITHER2` routes to `VB` (`PA2`), `VC` (`PA3`), `VE` (`PA15`), `VF` (`PB6`).
 
+#### Scenario: Switched PCB Topology and Fixed-Jumper Prototype Compatibility
+- **WHEN** `20261110-MZM` operates either with populated `TS5A23159` switches or with reworked fixed pilot jumpers (`DITHER1 -> VA`, `DITHER2 -> VC`, `VB` DC-only)
+- **THEN** `DAC8568` separates DC bias (`CH0–CH5`) from AC pilot generation (`CH6–CH7`) and keeps unused switch GPIOs LOW.
+
 ### Requirement: Two-Axis Extensibility & MCU Resource Budget
 - **MCU Portability**: Switching controller MCUs MUST require only a new Zephyr board under `boards/xidian/<board>/` without editing `drivers/`, `lib/`, or `app/`.
 - **Analog Daughterboard Portability**: Analog frontend capabilities, channel routing, gains, and calibration metadata MUST be abstracted behind `analog_board_ops_t` and `U21` (`P24C02A`) EEPROM descriptors.
 - **STM32H503CBT6 Hard Budget**: Firmware static RAM (`data + bss`) MUST NOT exceed `24576 B` (`24 KiB` of `32 KiB`), and Flash (`text + data`) MUST NOT exceed `110592 B` (`108 KiB` of `128 KiB`).
+
+#### Scenario: Split-Board Abstraction and Resource Compliance
+- **WHEN** firmware is built for `biasctrl_h503` with a `U21`-described analog daughterboard
+- **THEN** `scripts/check_mem_budget.py` MUST confirm `RAM <= 24576 B` and `Flash <= 110592 B`, while `lib/` and `app/` remain decoupled from MCU-specific Devicetree details.

@@ -2,7 +2,7 @@
 
 ## Purpose
 
-TBD - created by archiving change 01-board-h503-bringup. Update Purpose after archive.
+Defines the Zephyr RTOS v4.5.0 board support package, clock tree, pin mapping, FPC2 slew-rate limits, and memory budget contract for the STM32H503CBT6 digital baseboard.
 
 ## Requirements
 
