@@ -1,0 +1,8 @@
+# SPDX-License-Identifier: Apache-2.0
+config BIAS_ADS131M02
+	bool "Bias controller ADS131M02 acquisition"
+	default n
+	depends on DT_HAS_TI_ADS131M02_ENABLED
+	select GPIO
+	select SPI
+	select DMA if SOC_SERIES_STM32H5X

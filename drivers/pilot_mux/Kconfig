@@ -1,0 +1,7 @@
+# SPDX-License-Identifier: Apache-2.0
+config BIAS_PILOT_MUX
+	bool "TS5A23159 pilot switch matrix"
+	depends on GPIO
+	help
+	  Initialize all eight pilot-sw-gpios LOW and enable routing using the
+	  analog daughterboard's pilot route table.

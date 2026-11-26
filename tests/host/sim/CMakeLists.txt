@@ -1,0 +1,11 @@
+set(control_dir "${CMAKE_CURRENT_SOURCE_DIR}/../../../lib/control")
+add_library(control_mzm STATIC "${control_dir}/ctrl_mod_mzm.c" "${control_dir}/ctrl_bias_engine.c")
+target_link_libraries(control_mzm PUBLIC control_core)
+target_compile_options(control_mzm PRIVATE -Wall -Wextra -Werror)
+
+add_executable(mzm_sim test_mzm.c)
+target_link_libraries(mzm_sim PRIVATE control_mzm)
+target_compile_options(mzm_sim PRIVATE -Wall -Wextra -Werror)
+foreach(target IN ITEMS 90 180 0 17 45 135)
+    add_test(NAME mzm_sim_${target} COMMAND mzm_sim ${target})
+endforeach()

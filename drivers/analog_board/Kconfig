@@ -1,0 +1,10 @@
+# SPDX-License-Identifier: Apache-2.0
+config BIAS_ANALOG_BOARD_20261110_MZM
+	bool "20261110-MZM analog daughterboard backend"
+	default n
+	select BIAS_PILOT_MUX
+	select BIAS_DAC8568
+	select BIAS_EEPROM_BOARD
+	help
+	  Provides the analog_board_ops_t implementation for the 20261110-MZM
+	  split-board daughterboard (6 DC + 2 Pilot + 8-ch TS5A23159 + P24C02A).

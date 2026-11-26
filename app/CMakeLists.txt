@@ -2,7 +2,14 @@
 cmake_minimum_required(VERSION 3.20.0)
 
 list(APPEND BOARD_ROOT ${CMAKE_CURRENT_LIST_DIR}/..)
+list(APPEND ZEPHYR_EXTRA_MODULES ${CMAKE_CURRENT_LIST_DIR}/..)
 find_package(Zephyr REQUIRED HINTS $ENV{ZEPHYR_BASE})
-project(h503_bringup)
+project(biasctrl_h503)
 
-target_sources(app PRIVATE src/main.c)
+target_sources(app PRIVATE
+  src/main.c
+  src/rt_pipeline.c
+  src/cal_service.c
+  src/ctrl_thread.c
+  src/cli_service.c
+)

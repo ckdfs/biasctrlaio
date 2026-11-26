@@ -1,0 +1,13 @@
+cmake_minimum_required(VERSION 3.20)
+project(biasctrl_host_tests LANGUAGES C)
+set(CMAKE_C_STANDARD 11)
+set(CMAKE_C_STANDARD_REQUIRED ON)
+set(CMAKE_C_EXTENSIONS OFF)
+enable_testing()
+
+add_subdirectory(dsp)
+foreach(suite IN ITEMS pilot_mux control sim)
+    if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/${suite}/CMakeLists.txt")
+        add_subdirectory(${suite})
+    endif()
+endforeach()

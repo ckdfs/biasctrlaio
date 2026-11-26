@@ -1,0 +1,8 @@
+# SPDX-License-Identifier: Apache-2.0
+config BIAS_DAC8568
+	bool "Bias controller DAC8568"
+	default n
+	depends on SOC_SERIES_STM32H5X && DT_HAS_TI_DAC8568_ENABLED
+	select GPIO
+	select DMA
+	select SPI

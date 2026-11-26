@@ -1,0 +1,5 @@
+config BIAS_EEPROM_BOARD
+	bool "P24C02A daughterboard descriptor store"
+	default n
+	depends on I2C
+	select CRC

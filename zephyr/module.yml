@@ -1,0 +1,7 @@
+name: biasctrlaio
+build:
+  cmake: zephyr
+  kconfig: zephyr/Kconfig
+  settings:
+    board_root: .
+    dts_root: .

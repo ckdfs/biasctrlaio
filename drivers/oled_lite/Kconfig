@@ -1,0 +1,4 @@
+config BIAS_OLED_LITE
+	bool "OLED1 display and debounced dial keys"
+	default n
+	depends on I2C && GPIO

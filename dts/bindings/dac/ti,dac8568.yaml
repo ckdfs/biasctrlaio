@@ -1,0 +1,13 @@
+# SPDX-License-Identifier: Apache-2.0
+description: Texas Instruments DAC8568 eight-channel 16-bit DAC
+compatible: "ti,dac8568"
+include: spi-device.yaml
+properties:
+  ldac-gpios:
+    type: phandle-array
+    required: true
+    description: Active-low output update strobe.
+  clr-gpios:
+    type: phandle-array
+    required: true
+    description: Active-low hardware clear.

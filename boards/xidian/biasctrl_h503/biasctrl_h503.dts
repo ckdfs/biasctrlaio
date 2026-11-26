@@ -3,6 +3,8 @@
 /dts-v1/;
 #include <st/h5/stm32h503Xb.dtsi>
 #include <st/h5/stm32h503cbtx-pinctrl.dtsi>
+#include <zephyr/dt-bindings/dma/stm32_dma.h>
+#include <zephyr/dt-bindings/gpio/stm32-gpio.h>
 #include <zephyr/dt-bindings/input/input-event-codes.h>
 
 / {
@@ -53,21 +55,21 @@
 	};
 
 	zephyr,user {
-		pilot-sw-gpios = <&gpioa 0 GPIO_ACTIVE_HIGH>,
-				 <&gpioa 1 GPIO_ACTIVE_HIGH>,
-				 <&gpioa 2 GPIO_ACTIVE_HIGH>,
-				 <&gpioa 3 GPIO_ACTIVE_HIGH>,
-				 <&gpioa 4 GPIO_ACTIVE_HIGH>,
-				 <&gpioa 6 GPIO_ACTIVE_HIGH>,
-				 <&gpioa 15 GPIO_ACTIVE_HIGH>,
-				 <&gpiob 6 GPIO_ACTIVE_HIGH>;
-		spare-pa8-gpios = <&gpioa 8 GPIO_ACTIVE_HIGH>;
-		dac-clr-gpios = <&gpiob 0 GPIO_ACTIVE_LOW>;
-		dac-sync-gpios = <&gpiob 1 GPIO_ACTIVE_LOW>;
-		dac-ldac-gpios = <&gpiob 2 GPIO_ACTIVE_LOW>;
-		adc-cs-gpios = <&gpiob 12 GPIO_ACTIVE_LOW>;
-		adc-sync-gpios = <&gpioa 12 GPIO_ACTIVE_LOW>;
-		adc-drdy-gpios = <&gpioa 11 GPIO_ACTIVE_LOW>;
+		pilot-sw-gpios = <&gpioa 0 (GPIO_ACTIVE_HIGH | STM32_GPIO_LOW_SPEED)>,
+				 <&gpioa 1 (GPIO_ACTIVE_HIGH | STM32_GPIO_LOW_SPEED)>,
+				 <&gpioa 2 (GPIO_ACTIVE_HIGH | STM32_GPIO_LOW_SPEED)>,
+				 <&gpioa 3 (GPIO_ACTIVE_HIGH | STM32_GPIO_LOW_SPEED)>,
+				 <&gpioa 4 (GPIO_ACTIVE_HIGH | STM32_GPIO_LOW_SPEED)>,
+				 <&gpioa 6 (GPIO_ACTIVE_HIGH | STM32_GPIO_LOW_SPEED)>,
+				 <&gpioa 15 (GPIO_ACTIVE_HIGH | STM32_GPIO_LOW_SPEED)>,
+				 <&gpiob 6 (GPIO_ACTIVE_HIGH | STM32_GPIO_LOW_SPEED)>;
+		spare-pa8-gpios = <&gpioa 8 (GPIO_ACTIVE_HIGH | STM32_GPIO_LOW_SPEED)>;
+		dac-clr-gpios = <&gpiob 0 (GPIO_ACTIVE_LOW | STM32_GPIO_LOW_SPEED)>;
+		dac-sync-gpios = <&gpiob 1 (GPIO_ACTIVE_LOW | STM32_GPIO_LOW_SPEED)>;
+		dac-ldac-gpios = <&gpiob 2 (GPIO_ACTIVE_LOW | STM32_GPIO_LOW_SPEED)>;
+		adc-cs-gpios = <&gpiob 12 (GPIO_ACTIVE_LOW | STM32_GPIO_LOW_SPEED)>;
+		adc-sync-gpios = <&gpioa 12 (GPIO_ACTIVE_LOW | STM32_GPIO_LOW_SPEED)>;
+		adc-drdy-gpios = <&gpioa 11 (GPIO_ACTIVE_LOW | STM32_GPIO_LOW_SPEED)>;
 	};
 };
 
@@ -81,7 +83,7 @@
 	div-m = <2>;
 	mul-n = <125>;
 	div-p = <2>;
-	div-q = <2>;
+	div-q = <5>;
 	div-r = <2>;
 	status = "okay";
 };
@@ -107,9 +109,68 @@
 	pinctrl-names = "default";
 	clock-frequency = <I2C_BITRATE_FAST>;
 	status = "okay";
+
+	bias_eeprom: eeprom@50 {
+		compatible = "atmel,at24";
+		reg = <0x50>;
+		size = <256>;
+		pagesize = <8>;
+		address-width = <8>;
+		timeout = <5>;
+	};
 };
 
-/* FPC2 SPI signals use low slew when a later application enables the buses. */
+&gpdma1 {
+	status = "okay";
+};
+
+&spi1 {
+	pinctrl-0 = <&spi1_sck_pa5 &spi1_mosi_pa7>;
+	pinctrl-names = "default";
+	cs-gpios = <&gpiob 1 (GPIO_ACTIVE_LOW | STM32_GPIO_LOW_SPEED)>;
+	dmas = <&gpdma1 0 7 STM32_DMA_PERIPH_TX>,
+	       <&gpdma1 1 6 STM32_DMA_PERIPH_RX>;
+	dma-names = "tx", "rx";
+	status = "okay";
+
+	bias_dac: dac@0 {
+		compatible = "ti,dac8568";
+		reg = <0>;
+		spi-max-frequency = <12500000>;
+		spi-cpha;
+		ldac-gpios = <&gpiob 2 (GPIO_ACTIVE_LOW | STM32_GPIO_LOW_SPEED)>;
+		clr-gpios = <&gpiob 0 (GPIO_ACTIVE_LOW | STM32_GPIO_LOW_SPEED)>;
+	};
+};
+
+&spi2 {
+	pinctrl-0 = <&spi2_sck_pb13 &spi2_miso_pb14 &spi2_mosi_pb15>;
+	pinctrl-names = "default";
+	cs-gpios = <&gpiob 12 (GPIO_ACTIVE_LOW | STM32_GPIO_LOW_SPEED)>;
+	dmas = <&gpdma1 2 9 (STM32_DMA_PERIPH_TX | STM32_DMA_PRIORITY_HIGH)>,
+	       <&gpdma1 3 8 (STM32_DMA_PERIPH_RX | STM32_DMA_PRIORITY_HIGH)>;
+	dma-names = "tx", "rx";
+	status = "okay";
+
+	bias_adc: adc@0 {
+		compatible = "ti,ads131m02";
+		reg = <0>;
+		#io-channel-cells = <1>;
+		spi-max-frequency = <12500000>;
+		spi-cpha;
+		drdy-gpios = <&gpioa 11 (GPIO_ACTIVE_LOW | STM32_GPIO_LOW_SPEED)>;
+	};
+};
+
+&i2c1_scl_pb8 {
+	slew-rate = "low-speed";
+};
+
+&i2c1_sda_pb7 {
+	slew-rate = "low-speed";
+};
+
+/* FPC2 ribbon signals */
 &spi1_sck_pa5 {
 	slew-rate = "low-speed";
 };
