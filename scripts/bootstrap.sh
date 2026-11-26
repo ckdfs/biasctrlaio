@@ -98,3 +98,8 @@ EOF
 
 echo "==> Generating scripts/env.sh complete."
 echo "Run: source ${ENV_FILE}"
+
+if git -C "${ROOT_DIR}" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+    git -C "${ROOT_DIR}" config core.hooksPath .githooks
+    echo "==> Configured git core.hooksPath -> .githooks"
+fi

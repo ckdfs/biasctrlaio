@@ -9,7 +9,9 @@ context: |
   - Documentation sync rule: any design, hardware, interface, CLI/UI, or feature change MUST update the relevant pages under docs/README.md (docs/architecture.md including its changelog, docs/design/{optical,electrical,mechanical,algorithm,pcb-errata}.md, docs/experiments/), docs/user-guide.md, and README.md in the same change/commit.
 
 rules:
+  design:
+    - Explicitly state cross-domain opto-electronic impacts across docs/design/{optical,electrical,mechanical,algorithm,pcb-errata}.md and docs/experiments/ when hardware, DSP, control, CLI, or UI interfaces change.
   tasks:
     - Each task checkbox line must use `- [ ] <task_id> <title>` followed by indented `owned:`, `depends:`, and `verify:` metadata for bridge_ctl.py sync-openspec.
     - Keep Phase 1 Baseboard Bring-Up strictly decoupled from Phase 2 Analog Daughterboard integration.
-    - Every feature or design task MUST include corresponding docs/ updates (docs/architecture.md, docs/design/*.md, docs/experiments/, docs/user-guide.md, README.md as applicable) in its scope and `owned:` paths.
+    - Every feature or design task MUST include all affected docs/ and README.md paths from the AGENTS.md impact matrix in `owned:` and append `&& python3 scripts/check_repo_hygiene.py --working-tree --strict-doc-sync` to its `verify:` command.

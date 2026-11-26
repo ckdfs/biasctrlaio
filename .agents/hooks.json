@@ -1,0 +1,11 @@
+{
+  "doc-sync-gate": {
+    "Stop": [
+      {
+        "type": "command",
+        "command": "python3 ../scripts/agent_doc_gate.py",
+        "timeout": 20
+      }
+    ]
+  }
+}

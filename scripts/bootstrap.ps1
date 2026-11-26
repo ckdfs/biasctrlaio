@@ -188,6 +188,12 @@ foreach (`$p in @("$ArmBinDir", "$VenvScripts")) {
 "@
 Set-Content -Path $EnvPs1 -Value $envContent -Encoding UTF8
 
+if (Test-Path (Join-Path $RootDir ".git")) {
+    & git -C $RootDir config core.hooksPath .githooks
+    if ($LASTEXITCODE -ne 0) { throw "Failed to configure git core.hooksPath" }
+    Write-Host "==> Configured git core.hooksPath -> .githooks"
+}
+
 Write-Host "==> Bootstrap complete."
 Write-Host "Activate environment in PowerShell with:"
 Write-Host "  . .\scripts\env.ps1"

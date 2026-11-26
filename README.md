@@ -1,6 +1,6 @@
 # biasctrlaio
 
-基于 Zephyr RTOS v4.5.0 的分板式电光调制器偏压控制器固件工程（`STM32H503CBT6` 数字控制底板 `20261110-底板` + `20261110-MZM` 模拟子板）。
+电光调制器偏压控制系统（10% 监测光路 + 模拟前端 + 数字控制底板 + Zephyr RTOS 实时固件）。
 
 ## 当前项目状态
 
@@ -17,7 +17,7 @@
   - [Phase 4 单 MZM 闭环光学验证报告](docs/experiments/bringup/phase4-closed-loop-verify.md)
 - **OpenSpec 规格与活跃规划**：主规格位于 `openspec/specs/`，Phase 5 活跃规划位于 [openspec/changes/05-tdm-multichannel-and-ui/](openspec/changes/05-tdm-multichannel-and-ui/)
 
-## 快速初始化环境（克隆后一键配置）
+## 快速初始化环境（克隆后一键配置，同时启用 `.githooks/pre-commit` 文档门禁）
 
 ### macOS
 ```bash
@@ -60,10 +60,13 @@ cmake -B build/host-tests -S tests/host
 cmake --build build/host-tests
 ctest --test-dir build/host-tests --output-on-failure
 
-# 3. Zephyr QEMU 集成测试（5 项）
-export PATH="$ZEPHYR_SDK_INSTALL_DIR/hosttools/usr/bin:$PATH"
-west build -b qemu_cortex_m3 -d build/ztest_p4 tests/ztest -t run
+# 3. Zephyr QEMU 集成测试（5 项，自动识别工具链并检测通过标识）
+python3 scripts/run_qemu_ztest.py
 
-# 4. 查看 OpenSpec 与 SQLite 任务协同看板
+# 4. 仓库卫生、严格文档同步检查与矢量图重新编译
+python3 scripts/check_repo_hygiene.py --working-tree --strict-doc-sync
+python3 scripts/render_docs_figures.py
+
+# 5. 查看 OpenSpec 与 SQLite 任务协同看板
 python3 ~/.gemini/config/plugins/codex-mission-control/skills/codex-openspec-orchestrator/scripts/bridge_ctl.py status --project .
 ```

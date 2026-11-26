@@ -1,5 +1,7 @@
 # 光路、光功率与锁定点
 
+光路域作为本系统[光-电一体化闭环](../architecture.md)的被控对象，通过后面板 `CN1 (VA/VB/VC)` 接收偏压与导频激励，并通过 `1:9` 分束的监测支路经由 `InGaAs PIN PD` 与前面板 `H1 (PD IN)` 将光强谐波与直流电平送回 `20261110-MZM` 模拟子板（`U12A` / `R16`）。
+
 ## 单 MZM 的相位坐标
 
 设两臂场透射系数为 $a_1,a_2$，相位差为 $\phi=\varphi_1-\varphi_2$。输出场为
@@ -20,7 +22,7 @@ P_{out}=\tfrac{P_L}{2}(1+\nu\cos\phi).$$
 | MAX | 180° | 亮峰，H1 趋零，实测 H2 相位 +1.433 rad |
 | CUSTOM | 指定角度 | 在指定分支锁定，例如 135° 在 QUAD 与 MAX 之间 |
 
-实板用 $q=|H_2|\sin(\angle H_2)$ 区分亮峰与暗谷，20261110-MZM 的暗谷判据为 `null_q_sign = -1`。标定值与各点直流读数见[闭环实测](../experiments/bringup/phase4-closed-loop-verify.md)。
+实板用 $q=|H_2|\sin(\angle H_2)$ 区分亮峰与暗谷，受 `U12A` 反相跨阻与接收链 `2 kHz` 相移影响，20261110-MZM 的暗谷判据为 `null_q_sign = -1`（解调与极性契约见[算法设计](algorithm.md)）。标定值与各点直流读数见[闭环实测](../experiments/bringup/phase4-closed-loop-verify.md)。
 
 相位分解为 $\phi(t)=\phi_b(t)+\xi(t)+\phi_{RF}(t)$，其中 $\phi_b=\pi V_b/V_{\pi,DC}+\phi_0(t)$。直流微调满足 $\delta\phi=\pi\delta V_b/V_{\pi,DC}$。界面电荷和热光效应使 $\phi_0$ 漂移，半波电压的慢变还会改变电压到相位的斜率。计算导频调制深度时使用 $V_\pi(f_d)$，行波 RF 电极则使用 $V_{\pi,RF}(f_{RF})$。
 
@@ -30,7 +32,7 @@ P_{out}=\tfrac{P_L}{2}(1+\nu\cos\phi).$$
 
 $$E_{DPMZM}=\tfrac12 E_{in}\left[(1+\delta_P)h_I+h_Qe^{j\phi_P}\right].$$
 
-单只 PD 检测总强度。VA 的子臂 I 固定接 DITHER1，从 $f_1,2f_1$ 提取误差。VC 的子臂 Q 固定接 DITHER2，从 $f_2,2f_2$ 提取误差。VB 控制父臂直流相位，误差来自 $f_1\pm f_2$ 的交叉项。单臂驱动还产生公共相位因子 $e^{j\chi}$，此时干涉项的相位为 $\phi_P+\chi_Q-\chi_I$。
+单只 PD 经 `H1 (PD IN)` 检测总强度。经 `CN1` 输出的 VA 子臂 I 固定接 DITHER1，从 $f_1,2f_1$ 提取误差；VC 子臂 Q 固定接 DITHER2，从 $f_2,2f_2$ 提取误差；VB 控制父臂直流相位，误差来自 $f_1\pm f_2$ 的交叉项（解调频点详见[算法设计](algorithm.md)）。单臂驱动还产生公共相位因子 $e^{j\chi}$，此时干涉项的相位为 $\phi_P+\chi_Q-\chi_I$。
 
 ## 监测光功率预算与台架
 

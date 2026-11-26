@@ -1,6 +1,6 @@
 # biasctrlaio 用户使用说明
 
-本手册面向 `biasctrlaio` 分板式电光调制器偏压控制器（`STM32H503CBT6` 数字控制底板 `20261110-底板` + `20261110-MZM` 模拟子板）的硬件接线、固件编译烧录、串口校准操作及故障排查。
+本手册面向 `biasctrlaio` 光-电一体化分板式电光调制器偏压控制器（`10%` 监测光路 + `20261110-MZM` 模拟子板 + `STM32H503CBT6` 数字控制底板 `20261110-底板`）的光路连接、硬件接线、固件编译烧录、串口校准操作及故障排查。
 
 ## 1. 当前功能边界
 
@@ -17,7 +17,7 @@
 
 ## 2. 硬件组成、接线与当前原型飞线状态
 
-板间引脚与电源测试点见[电气设计](design/electrical.md)，机械装配与外壳步骤见[机械与外壳设计](design/mechanical.md)，返修位置见[PCB 勘误](design/pcb-errata.md)。
+光路预算与台架见[光学设计](design/optical.md)，板间引脚与电源测试点见[电气设计](design/electrical.md)，机械装配与外壳步骤见[机械与外壳设计](design/mechanical.md)，返修位置见[PCB 勘误](design/pcb-errata.md)。
 
 ### 2.1 板卡连接与供电
 1. 通过 `30-pin FPC2` 排线连接数字底板 `20261110-底板` 与模拟子板 `20261110-MZM`（连接前断电确认防呆与方向）。
@@ -33,14 +33,18 @@
 | 接口 | 信号与用途 | 接线要求 |
 | --- | --- | --- |
 | `CN1` (`VA / VB / VC`) | 偏置与导频输出至调制器电极 | 单 MZM 接 `VA` 与 `GND`；DPMZM 接 `VA`（子臂 I）、`VC`（子臂 Q）、`VB`（主臂直流） |
-| 模拟子板光电输入 | `PD -> U12A` 跨阻输入 + 直流监测 `CH1` | 外部激光器 → 调制器 → 光电探测器接入模拟板 AC/DC 输入端 |
+| `H1` (`PD IN`, `- + G`) | 监测光路 `InGaAs PIN PD -> U12A` 跨阻输入 + `R16` 直流监测 `CH1` | `1550 nm` 激光器 -> 手动偏振控制器（PC）-> MZM/DPMZM -> `1:9` 光耦合器（`90%` 主业务输出、`10%` 监测支路）-> `InGaAs PIN PD` 接入前面板 `H1` |
 | 底板 USB（`U19 STM32F042`） | DAPLink 调试串口（`USART1`）与 SWD 烧录口 | 串口波特率 **`115200 bps, 8N1`**，无硬件流控；macOS 常见设备名为 `/dev/cu.usbmodem*` |
+
+- **光路接入检查要点（详参[光学设计](design/optical.md)）**：
+  - 接入前先通过手动 PC 对准调制器入射偏振态，防止消光比劣化或出现虚假极值。
+  - 监测支路（`10%` 分束端）名义平均光功率为 `-9 dBm`（`125.89 µW`），峰值须控制在 `≤ 344.4 µW`（`I_max ≤ 310 µA`，对应 `CH1 ≤ 1.023 V`），低于 `ADS131M02 ±1.2 V` 满量程上限（预留安全裕量防削波与 `D1` 钳位触发）。
 
 ---
 
 ## 3. 编译环境、固件烧录与自动化测试
 
-首次拉取仓库后按系统类型执行一次初始化（详参 [README.md](../README.md)）：
+首次拉取仓库后按系统类型执行一次初始化（详参 [README.md](../README.md)，脚本会自动配置 `git config core.hooksPath .githooks` 以启用本地提交前文档同步门禁）：
 - macOS / Linux：`./scripts/bootstrap.sh && source scripts/env.sh`
 - Windows PowerShell：`.\scripts\bootstrap.ps1` 后运行 `. .\scripts\env.ps1`
 
@@ -67,12 +71,13 @@ west flash -d build/h503_p4
 cmake --build build/host-tests
 ctest --test-dir build/host-tests --output-on-failure
 
-# Zephyr 集成测试（QEMU cortex-m3，5 项）
-source scripts/env.sh
-export PATH="$ZEPHYR_SDK_INSTALL_DIR/hosttools/usr/bin:$PATH"
-west build -b qemu_cortex_m3 -d build/ztest_p4 tests/ztest -t run
+# Zephyr 集成测试（QEMU cortex-m3，5 项，自动查找工具链并判定结果）
+python3 scripts/run_qemu_ztest.py
+
+# 仓库卫生与严格文档同步检查
+python3 scripts/check_repo_hygiene.py --working-tree --strict-doc-sync
 ```
-> 注意：QEMU 执行完 `PROJECT EXECUTION SUCCESSFUL` 后不会主动退出，交互终端中需按 `Ctrl+a` 再按 `x` 退出。
+> 注：若直接手工执行 `west build -b qemu_cortex_m3 -d build/ztest_p4 tests/ztest -t run`，QEMU 执行完 `PROJECT EXECUTION SUCCESSFUL` 后不会主动退出，交互终端中需按 `Ctrl+a` 再按 `x` 退出。
 
 ---
 
@@ -88,7 +93,7 @@ eeprom init: ok crc=0x1E71EE41
 向 `U21 (P24C02A)` `0..147 B` 写入与 `20261110-MZM` 原理图匹配的默认板卡描述符（`±10 V` 量程、`47 kΩ` TIA）。
 
 ### 4.2 双遍扫压校准并保存（连接完整光路后执行）
-1. 确认激光器已开启且 MZM 光输出已接入探测器；`VA` 处于空闲 `0 mV`。
+1. 确认激光器已开启、手动 PC 偏振已对准，且 `10%` 监测支路已接入 `H1 (PD IN)`；通过 `status` 确认 `VA` 处于空闲 `0 mV` 且监测 `dc` 位于线性未削波区间（`< 1.02 V`）。
 2. 执行两遍校准（单次耗时约 `210 s`，期间 `VA` 从 `-10.000 V` 扫描至 `+10.000 V`）：
    ```text
    > cal bias
@@ -163,7 +168,7 @@ drops=0 crc_errs=0 fault=0 cleanup_err=0 load_err=0 rt_fault=0
 | 错误码 | 含义 | 常见原因与排查措施 |
 | --- | --- | --- |
 | `-77` (`-EBADMSG`) | CRC 校验失败或记录未写入 | 1. 开机 `ctrl_thread init: -77`：新板仅有描述符但未校准，运行 `cal bias` 后执行 `save`；2. 若 `eeprom init` 前报错，先执行 `eeprom init`；3. 运行时 `crc_errs > 0`：检查 `FPC2` 排线接触与 `ADS131M02` 供电。 |
-| `-33` (`-EDOM`) | 数学域/观测器收敛失败 | 未接通光路、光功率过弱导致观测半径不足（`< 0.10`），或单遍扫压未能识别足够极值点。确认光路信号后执行 `reinit` 重试。 |
+| `-33` (`-EDOM`) | 数学域/观测器收敛失败 | 未接通光路、光功率过弱导致观测半径不足（`< 0.10`），偏振未对准（PC 失调导致消光比退化），或光功率过高触发 `CH1` 削波 / `D1` 钳位导致单遍扫压未能识别极值点。对照[光学设计](design/optical.md)核对监测光功率与 `status` 中 `dc` 读数后执行 `reinit` 重试。 |
 | `-16` (`-EBUSY`) | 通道/资源忙 | 控制线程非 `IDLE` 时重复发命令（先执行 `stop`），或实时流水线 SPI 未在周期内完成。 |
 | `-116` (`-ETIMEDOUT`) | 通信或异步写入超时 | 检查模拟板 `+5V` / `DAC8568` / `ADS131M02` 供电及 `FPC2` 连接后执行 `reinit`。 |
 | `-19` (`-ENODEV`) | 外设未就绪或未初始化 | 检查 `I2C1`（`0x3C/0x50`）上拉及排线连接，通过 `reinit` 恢复。 |
@@ -178,3 +183,5 @@ drops=0 crc_errs=0 fault=0 cleanup_err=0 load_err=0 rt_fault=0
 | 日期 | 版本 | 修改内容 | 对应阶段/任务 |
 | --- | --- | --- | --- |
 | 2026-11-26 | v1.0 | 新建用户使用手册，涵盖实板飞线基线、编译烧录测试、Phase 4 CLI 全流程、OLED/LED 指示及故障排查 | Phase 4 收尾 / 文档建档 |
+| 2026-11-26 | v1.1 | 补齐光路分束与监测功率核查要点、`H1 (PD IN)` 接线、`scripts/run_qemu_ztest.py` 测试入口及 `-33` 光饱和/偏振排查项 | 文档光-电一致性核查 |
+| 2026-11-26 | v1.2 | 在初始化与测试章节补充 `.githooks/pre-commit` 自动激活与 `--working-tree --strict-doc-sync` 文档同步检查说明 | Agent 文档同步规范化 |

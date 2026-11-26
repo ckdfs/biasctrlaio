@@ -60,7 +60,7 @@
 | 底板 `VDD33D` 干线及 `U5` (`TPS7A2033`) | `0.45 mm` (`1 oz`) / `SOT-23-5` | `135 mA` | `180 mA` | `≤ 13.7 mV` | 走线 $\Delta T = 0.4\ ^\circ\text{C}$；`U5` 紧邻双散热地过孔，$\Delta T_j = 45.4\ ^\circ\text{C}$（满载 $60.5\ ^\circ\text{C}, T_j = 95.5\ ^\circ\text{C} < 125\ ^\circ\text{C}$） |
 | 底板 `±12V` 干线及 `U1`/`U2` LDO | `0.45 mm` (`1 oz`) / `HVSSOP-8-EP` | `11 mA` / `9 mA` | `150 mA` / `200 mA` | `≤ 12.6 mV` | `U1`/`U2` 底部散热焊盘阵列过孔接地，$\Delta T_j \le 28.1\ ^\circ\text{C}$ |
 | MZM 板 `Layer 16` `VSYS`、`±12V` 干线 | `0.50–0.55 mm` (`0.5 oz`) | `33 mA` / `11 mA` | `90 mA` / `200 mA` | `≤ 10.4 mV` | 内层走线满载 $\Delta T < 1.2\ ^\circ\text{C}$；`FPC2` 电源脚均配双并联过孔 |
-| MZM 板 `Layer 16` `+5V`、`VDD33D/A` | `0.36–0.42 mm` (`0.5 oz`) | `15 mA` / `10 mA` | `45 mA` / `25 mA` | `≤ 3.5 mV` | `U5`/`U6`/`U7` 本地 LDO 满载 $\Delta T_j \le 8.4\ ^\circ\text{C}$ |
+| MZM 板 `Layer 16` `+5V`、`VDD33D/A` | `0.36–0.42 mm` (`0.5 oz`) | `15 mA` / `10 mA` | `45 mA` / `25 mA` | `≤ 3.5 mV` | `U5`/`U6`/`U7`（原型 `U7` 已旁路）本地 LDO 满载 $\Delta T_j \le 8.4\ ^\circ\text{C}$ |
 | MZM 板 `U11`/`U12` (`OPA4192` 四运放) | `SOIC-14` | `4.2 mA`/颗 | 单臂误接 `50 Ω`（受 `U1` `150 mA` 限流约束） | — | 常态高阻负载 $P = 101\text{ mW}, \Delta T_j = 8.5\ ^\circ\text{C}$；外部 `50 Ω` 误接限流极限 $T_j \le 114\ ^\circ\text{C} < 150\ ^\circ\text{C}$ |
 
 ## 测试点（板图坐标，mm）
@@ -91,6 +91,9 @@
 | 本地 UI (`KEY1–3` / `LED1`) | `PB3 / PB4 / PB5`（上拉低有效），`PC13`（高有效） | 拨轮开关 `20 ms` 软件去抖；`LED1` 正常 `500 ms` / 故障 `150 ms` | [keys.c](../../drivers/oled_lite/keys.c) |
 
 ## 模拟子板（`20261110-MZM`）信号链定量关系与实板基线
+
+本子板通过后面板 `CN1 (VA/VB/VC)` 与前面板 `H1 (PD IN)` 构成光-电硬件接口边界：`CN1` 输出的直流偏压与导频幅度按调制器 $V_\pi$ 映射为光学相位 $\phi_b$ 与深度 $m$（见[光学设计](optical.md)）；`10%` 监测支路光功率（名义 `-9 dBm`、峰值 `≤ 344.4 µW / 310 µA`）经 `H1` 进入模拟前端，直接约束 `R15/R16`、`R17 = 47 kΩ` 与 `D1` 钳位裕量，且接收链反相与相移决定了[算法设计](algorithm.md)中的 `null_q_sign = -1` 极性契约。
+
 1. **直流偏压链路（`DAC8568 CH0–CH5` -> `U11 OPA4192` 减法器）**：
    - `DAC8568` 使能内部 `2.500 V` 基准（输出 `0..5.000 V`，上电序列：`1 ms -> RESET(0x07000000) -> 2 ms -> REF_ENABLE(0x08000001) -> 5 ms (C46=10 uF) -> CH_ALL=32768`），通道写命令使用 `0x03 (CMD_WRITE_UPDATE)`。
    - 减法器传输关系（写入 `U21` 默认描述符）：

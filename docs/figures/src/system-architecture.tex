@@ -7,18 +7,19 @@
 \definecolor{appbd}{HTML}{3B5B82}
 \definecolor{halbd}{HTML}{8A6D2D}
 \definecolor{drvbd}{HTML}{3A6F4C}
+\definecolor{optbd}{HTML}{2C6E7F}
 \definecolor{rtbg}{HTML}{FBEFEF}
 \definecolor{rtbd}{HTML}{9E3B3B}
 
 \tikzset{
   box/.style={
     draw=#1,fill=white,rounded corners=2pt,align=center,
-    minimum width=3.65cm,minimum height=1.0cm,inner sep=4pt,
+    minimum width=3.55cm,minimum height=1.0cm,inner sep=4pt,
     font=\small,line width=0.65pt
   },
   rtbox/.style={
     draw=rtbd,fill=rtbg,rounded corners=2pt,align=center,
-    minimum width=3.65cm,minimum height=1.0cm,inner sep=4pt,
+    minimum width=3.55cm,minimum height=1.0cm,inner sep=4pt,
     font=\small,line width=0.8pt
   },
   layer/.style={
@@ -26,7 +27,7 @@
   },
   arr/.style={-{Latex[length=2.1mm,width=1.4mm]},line width=0.75pt,draw=black!80},
   darr/.style={-{Latex[length=2.1mm,width=1.4mm]},line width=0.75pt,dashed,draw=black!65},
-  lbl/.style={font=\scriptsize,fill=white,inner sep=1.5pt}
+  lbl/.style={font=\scriptsize,fill=white,inner sep=1.5pt,align=center}
 }
 
 \begin{document}
@@ -39,20 +40,27 @@
   \node[rtbox]     (rt)   at (0, -3.05) {\textbf{rt\_pipeline}\\{\scriptsize 64 kSPS DRDY\# ISR (15.625 $\mu$s)}};
 
   % Layer 2: HAL Boundary
-  \node[box=halbd] (mcu)  at (6.0, 1.65) {\textbf{MCU 板卡层}\\{\scriptsize boards/xidian/biasctrl\_h503}\\{\scriptsize STM32H503CBT6 @ 250 MHz}};
-  \node[box=halbd] (ops)  at (6.0, -0.35) {\textbf{analog\_board\_ops\_t}\\{\scriptsize include/bias/analog\_board.h}\\{\scriptsize 子板无关操作虚表}};
-  \node[box=halbd] (eep)  at (6.0, -2.4) {\textbf{U21 描述符协议}\\{\scriptsize include/bias/eeprom\_schema.h}\\{\scriptsize CRC-32 板卡与校准绑定}};
+  \node[box=halbd] (mcu)  at (5.65, 1.65) {\textbf{MCU 板卡层}\\{\scriptsize boards/xidian/biasctrl\_h503}\\{\scriptsize STM32H503CBT6 @ 250 MHz}};
+  \node[box=halbd] (ops)  at (5.65, -0.35) {\textbf{analog\_board\_ops\_t}\\{\scriptsize include/bias/analog\_board.h}\\{\scriptsize 子板无关操作虚表}};
+  \node[box=halbd] (eep)  at (5.65, -2.40) {\textbf{U21 描述符协议}\\{\scriptsize include/bias/eeprom\_schema.h}\\{\scriptsize CRC-32 板卡与校准绑定}};
 
-  % Layer 3: Drivers & Hardware
-  \node[box=drvbd] (oled) at (11.9, 2.35) {\textbf{eeprom\_board \& oled\_lite}\\{\scriptsize I2C1 400 kHz (bias\_i2c1\_mutex)}};
-  \node[box=drvbd] (mzm)  at (11.9, 0.80) {\textbf{20261110-MZM 后端}\\{\scriptsize drivers/analog\_board/mzm\_20261110.c}};
-  \node[box=drvbd] (dac)  at (11.9, -0.80) {\textbf{dac8568 (DAC8568)}\\{\scriptsize SPI1 12.5 MHz 异步无 IRQ DMA}};
-  \node[box=drvbd] (adc)  at (11.9, -2.40) {\textbf{ads131m02 (ADS131M02)}\\{\scriptsize SPI2 12.5 MHz 24-bit+CRC DMA}};
+  % Layer 3: Drivers & Analog Hardware
+  \node[box=drvbd] (oled) at (11.4, 2.35) {\textbf{eeprom\_board \& oled\_lite}\\{\scriptsize I2C1 400 kHz (bias\_i2c1\_mutex)}};
+  \node[box=drvbd] (mzm)  at (11.4, 0.80) {\textbf{20261110-MZM 后端}\\{\scriptsize drivers/analog\_board/mzm\_20261110.c}};
+  \node[box=drvbd] (dac)  at (11.4, -0.80) {\textbf{DAC8568 + OPA4192}\\{\scriptsize SPI1 12.5 MHz / ±10 V 偏压+导频}};
+  \node[box=drvbd] (adc)  at (11.4, -2.40) {\textbf{U12A TIA/DC + ADS131M02}\\{\scriptsize SPI2 12.5 MHz / 24-bit 64 kSPS}};
+
+  % Layer 4: Optical Plant
+  \node[box=optbd] (laser)   at (18.3, 2.35) {\textbf{1550 nm DFB + PC}\\{\scriptsize 连续光源与手动偏振对准}};
+  \node[box=optbd] (mod)     at (18.3, 0.80) {\textbf{MZM / DPMZM 调制器}\\{\scriptsize 电光相位调制 (VA/VB/VC)}};
+  \node[box=optbd] (coupler) at (18.3, -0.80) {\textbf{1:9 光耦合器}\\{\scriptsize 90\% 主光路 / 10\% 监测}};
+  \node[box=optbd] (pd)      at (18.3, -2.40) {\textbf{InGaAs PIN PD}\\{\scriptsize 0.90 A/W 监测光电转换}};
 
   \begin{scope}[on background layer]
     \node[layer=appbd,fit=(main)(rt),inner xsep=24pt,label={[font=\small\bfseries,text=appbd]above:应用与算法层 (app/ + lib/)}] {};
     \node[layer=halbd,fit=(mcu)(eep),label={[font=\small\bfseries,text=halbd]above:双轴硬件抽象边界}] {};
-    \node[layer=drvbd,fit=(oled)(adc),label={[font=\small\bfseries,text=drvbd]above:驱动与硬件层 (drivers/)}] {};
+    \node[layer=drvbd,fit=(oled)(adc),label={[font=\small\bfseries,text=drvbd]above:驱动与模拟硬件层 (drivers/ + 子板)}] {};
+    \node[layer=optbd,fit=(laser)(pd),label={[font=\small\bfseries,text=optbd]above:光路与调制对象层 (外部光路)}] {};
   \end{scope}
 
   % App internal arrows (route around dsp box)
@@ -66,11 +74,19 @@
   \draw[arr] (main.east) -- ++(1.3,0) |- ([yshift=2mm]oled.west);
   \draw[arr] (ctrl.east) -- ([yshift=1.5mm]ops.west);
   \draw[arr] ([yshift=-1.5mm]rt.east) -- ++(1.15,0) |- ([yshift=-1.5mm]ops.west);
-  \draw[arr] (ops.east) -- ++(0.95,0) |- (mzm.west);
+  \draw[arr] (ops.east) -- ++(0.85,0) |- (mzm.west);
+  \draw[arr] (mzm.north) -- (oled.south);
   \draw[arr] (mzm.south) -- (dac.north);
-  \draw[arr] (mzm.east) -- ++(0.45,0) |- ([yshift=-2mm]oled.east);
-  \draw[arr] ([yshift=-3.2mm]rt.east) -- ++(1.5,0) |- ++(7.5,-0.55) -| ($(adc.south)+(-0.8,0)$);
-  \draw[darr] (mcu.east) -- ++(0.65,0) node[lbl,above]{DT/pinctrl} -- ++(0.35,0) |- ([yshift=2.5mm]adc.west);
-  \draw[darr] (eep.east) -- ++(1.05,0) |- ([yshift=-2.5mm]oled.west);
+  \draw[arr] ([yshift=-3.2mm]rt.east) -- ++(1.25,0) |- (10.5,-4.35) -| ($(adc.south)+(-0.8,0)$);
+  \draw[darr] (mcu.east) -- ++(0.60,0) node[lbl,above]{DT/pinctrl} -- ++(0.45,0) |- ([yshift=2.5mm]adc.west);
+  \draw[darr] (eep.east) -- ++(1.20,0) |- ([yshift=-2.5mm]oled.west);
+
+  % Optical plant internal & opto-electronic closed loop
+  \draw[arr] (laser.south) -- (mod.north);
+  \draw[arr] (mod.south) -- (coupler.north);
+  \draw[arr] (coupler.south) -- node[right,font=\scriptsize]{10\% 监测} (pd.north);
+  \draw[arr] (coupler.east) -- ++(1.1,0) node[right,font=\scriptsize,align=left]{90\% 主光路\\[-1pt]{\color{black!65}(业务输出)}};
+  \draw[arr] (dac.east) -- ++(1.65,0) |- node[lbl,pos=0.25]{CN1\\(VA/VB/VC)} (mod.west);
+  \draw[arr] (pd.west) -- node[lbl,above]{H1 (PD IN)} (adc.east);
 \end{tikzpicture}
 \end{document}
