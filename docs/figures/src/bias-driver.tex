@@ -1,0 +1,26 @@
+\documentclass[border=8pt]{standalone}
+\usepackage[fontset=fandol]{ctex}
+\usepackage{amsmath}
+\usepackage{tikz}
+\usepackage[european]{circuitikz}
+\usetikzlibrary{positioning,calc}
+
+\begin{document}
+\begin{circuitikz}[font=\small,european resistors]
+  \ctikzset{bipoles/length=1.0cm,resistors/scale=.7,capacitors/scale=.7}
+  \draw (9.4,0) node[op amp,anchor=+](U){};
+  \node[below=3mm of U.down,align=center] {U11A\\OPA4192ID};
+  \coordinate (n) at ($(U.-)+(-.95,0)$);
+  \coordinate (o) at ($(U.out)+(.65,0)$);
+  \draw (0,0) node[left,align=right]{慢偏压 DAC\\$V_{\mathrm{DAC}}$ (CH0--5)} to[R,l^=$R_{26}$,a_=30~k$\Omega$] (2.6,0) coordinate(p) -- (U.+);
+  \draw (p) to[R,l_=$R_{22}$,a^=120~k$\Omega$, *-] ++(0,-2.05) node[ground]{};
+  \draw (6.1,0) to[C,l_=$C_{51}$,a^=0.68~$\mu$F,*-] ++(0,-2.05) node[ground]{};
+  \draw (0,2.65) node[left]{$V_{\mathrm{REF}}$ (2.500 V)} to[R,l^=$R_{24}\ (1~\mathrm{k}\Omega)$] (2.8,2.65) coordinate(t) to[R,l^=$R_{25}\ (2~\mathrm{k}\Omega)$] (n |- t) -- (n) -- (U.-);
+  \draw (t) to[C,l=$C_{50}\ (22~\mu\mathrm{F})$,*-] ++(0,-1.7) node[ground]{};
+  \draw (0,4.35) node[left,align=right]{独立导频 DAC\\$V_{\mathrm{pilot}}$ (CH6/7)} to[C,l^=$C_{\mathrm{inj}}\ (100~\mathrm{nF\ C0G})$] (3.1,4.35) to[R,l^=$R_{\mathrm{inj}}\ (120~\mathrm{k}\Omega)$] (n |- 0,4.35) coordinate(f1) -- (n |- t) node[circ]{};
+  \draw (f1) node[circ]{} -- ++(0,1.05) coordinate(fr) to[R,l^=$R_{23}$,a_=12~k$\Omega$] (o |- fr) coordinate(fo);
+  \draw (fr) node[circ]{} -- ++(0,1.55) coordinate(fc) to[C,l^=$C_{49}\ (4.7~\mathrm{nF\ C0G})$] (o |- fc) -- (fo) node[circ]{};
+  \draw (U.out) -- (o) node[circ]{} -- (fo);
+  \draw (o) to[short,-o] ++(.9,0) node[right]{$V_b \in [-10, +10]\ \mathrm{V}$};
+\end{circuitikz}
+\end{document}

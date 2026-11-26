@@ -6,10 +6,10 @@ context: |
   - Two-axis extensibility: swappable MCU boards under boards/xidian/<board>/ and swappable analog daughterboards via analog_board_ops_t + U21 P24C02A EEPROM descriptor.
   - Hard resource budgets: static RAM <= 24576 B (24 KiB), Flash <= 110592 B (108 KiB), verified via scripts/check_mem_budget.py.
   - Guardrails: never read/write /tmp (use .agent-bridge/), fast-fail without silent fallbacks, never auto-rollback Git.
-  - Documentation sync rule: any design, hardware, interface, CLI/UI, or feature change MUST update docs/design.md, docs/user-guide.md, and README.md (including changelogs) in the same change/commit.
+  - Documentation sync rule: any design, hardware, interface, CLI/UI, or feature change MUST update the relevant pages under docs/README.md (docs/architecture.md including its changelog, docs/design/{optical,electrical,mechanical,algorithm,pcb-errata}.md, docs/experiments/), docs/user-guide.md, and README.md in the same change/commit.
 
 rules:
   tasks:
     - Each task checkbox line must use `- [ ] <task_id> <title>` followed by indented `owned:`, `depends:`, and `verify:` metadata for bridge_ctl.py sync-openspec.
     - Keep Phase 1 Baseboard Bring-Up strictly decoupled from Phase 2 Analog Daughterboard integration.
-    - Every feature or design task MUST include corresponding docs/ updates (docs/design.md, docs/user-guide.md, README.md as applicable) in its scope and `owned:` paths.
+    - Every feature or design task MUST include corresponding docs/ updates (docs/architecture.md, docs/design/*.md, docs/experiments/, docs/user-guide.md, README.md as applicable) in its scope and `owned:` paths.

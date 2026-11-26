@@ -10,11 +10,11 @@
 ## 工程文档索引
 
 - **用户使用说明**：[docs/user-guide.md](docs/user-guide.md)（硬件接线与飞线基线、编译烧录、串口 CLI 命令、`OLED1/LED1` 说明及故障排查）
-- **系统设计文档**：[docs/design.md](docs/design.md)（分板架构、信号链公式、`64 kSPS` 实时隔离模型、DSP/控制算法、`U21` 存储布局及 Phase 5 架构演进）
-- **硬件验证记录**：
-  - [Phase 1 底板 Bring-Up 验证报告](docs/bringup/phase1-h503-bringup.md)
-  - [Phase 2 外设与分板集成验证报告](docs/bringup/phase2-peripherals-verify.md)
-  - [Phase 4 单 MZM 闭环光学验证报告](docs/bringup/phase4-closed-loop-verify.md)
+- **系统设计文档**：[文档索引](docs/README.md) 与 [系统架构](docs/architecture.md)（分板架构、光路/电气/机械外壳/算法设计、PCB 勘误、`64 kSPS` 实时隔离模型、`U21` 存储布局及 Phase 5 架构演进）
+- **[实验台账](docs/experiments/README.md)**：
+  - [Phase 1 底板 Bring-Up 验证报告](docs/experiments/bringup/phase1-h503-bringup.md)
+  - [Phase 2 外设与分板集成验证报告](docs/experiments/bringup/phase2-peripherals-verify.md)
+  - [Phase 4 单 MZM 闭环光学验证报告](docs/experiments/bringup/phase4-closed-loop-verify.md)
 - **OpenSpec 规格与活跃规划**：主规格位于 `openspec/specs/`，Phase 5 活跃规划位于 [openspec/changes/05-tdm-multichannel-and-ui/](openspec/changes/05-tdm-multichannel-and-ui/)
 
 ## 快速初始化环境（克隆后一键配置）

@@ -1,0 +1,37 @@
+\documentclass[border=8pt]{standalone}
+\usepackage[fontset=fandol]{ctex}
+\usepackage{amsmath,amssymb}
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta}
+
+\tikzset{
+  thesisarrow/.style={-{Latex[length=2mm]},line width=0.75pt}
+}
+
+\begin{document}
+\begin{tikzpicture}[font=\small]
+  \begin{scope}[shift={(0,0)}]
+    \draw[->] (-2.1,0) -- (2.15,0) node[right=2pt]{$H_1$};
+    \draw[->] (0,-1.65) -- (0,1.8) node[above=1pt]{$H_2$};
+    \draw[thick] (0,0) ellipse (1.75 and 0.65);
+    \draw[<->] (-0.6,-0.65) -- node[left=2pt]{弱轴} (-0.6,0.65);
+    \draw[blue!70!black,thick] (1.1,0.5) ellipse (0.34 and 0.20);
+    \fill (1.1,0.5) circle (2pt);
+    \node[align=center] at (0,-2.2) {观测空间：噪声协方差 $\Sigma_n$\\弱观测轴经逆变换放大误差};
+  \end{scope}
+  \draw[thesisarrow] (2.8,0) -- node[above=2pt]{$M_{\mathrm{eff}}^{-1}$} (4.8,0);
+  \begin{scope}[shift={(6.85,0)}]
+    \draw[->] (-1.65,0) -- (1.9,0) node[right=2pt]{$\hat{u}_x$};
+    \draw[->] (0,-1.65) -- (0,1.8) node[above=1pt]{$\hat{u}_y$};
+    \draw[thick] (0,0) circle (1.2);
+    \coordinate (u) at (40:1.2);
+    \draw[thick,->] (0,0) -- (u) node[below right=1pt]{$\mathbf{u}$};
+    \draw[blue!70!black,thick,->] (u) -- ++(130:0.65) node[above=1pt]{$\delta\mathbf{u}_{\mathrm{tan}}$};
+    \draw[dashed,thick,->] (u) -- ++(40:0.55) node[right=2pt]{$\delta\mathbf{u}_{\mathrm{rad}}$};
+    \draw[->] (0.52,0) arc (0:40:0.52);
+    \node[font=\footnotesize] at (20:0.74) {$\phi_b$};
+    \node[align=center] at (0,-2.2) {单位圆空间：切向分量引起角度抖动\\径向分量改变回拉模长};
+  \end{scope}
+  \node at (3.45,-3.45) {$\sigma_\phi^2(\phi_b)=\mathbf{t}^{\mathsf T}M_{\mathrm{eff}}^{-1}\Sigma_n M_{\mathrm{eff}}^{-\mathsf T}\mathbf{t},\qquad\mathbf{t}=(-\sin\phi_b,\cos\phi_b)^{\mathsf T}$};
+\end{tikzpicture}
+\end{document}

@@ -1,0 +1,27 @@
+\documentclass[border=8pt]{standalone}
+\usepackage[fontset=fandol]{ctex}
+\usepackage{amsmath,amssymb}
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta,positioning}
+
+\tikzset{
+  thesisblock/.style={draw=black!75,rounded corners=2pt,align=center,
+    inner sep=5pt,minimum height=10.5mm,fill=gray!5,line width=0.65pt},
+  thesisarrow/.style={-{Latex[length=2mm]},line width=0.75pt}
+}
+
+\begin{document}
+\begin{tikzpicture}[font=\small]
+  \node[thesisblock,text width=5.4cm] (raw)  at (0,0) {Pass 1 扫压（257 步，$-10\sim+10~\mathrm{V}$）\\提取 $H_1$ 谷点间距得 $V_\pi$};
+  \node[thesisblock,text width=5.4cm] (sign) at (0,-2.3) {极性判别（\texttt{null\_q\_sign = -1}）\\由 $q=|H_2|\sin\angle H_2$ 锁定暗谷基准 $V_{\mathrm{null}}$};
+  \node[thesisblock,text width=5.4cm] (lsq)  at (0,-4.75) {Pass 2 在线累计 $3\times 3$ 对称 Gram 矩阵\\按 $[1,\sin\phi,\cos\phi]$ 增量更新（$<256~\mathrm{B}$）};
+  \node[thesisblock,text width=5.4cm] (chol) at (6.8,-4.75) {Cholesky 分解求解仿射参数\\$\mathbf{h}=\mathbf{o}+M[\sin\phi,\cos\phi]^{\mathsf T}$};
+  \node[thesisblock,text width=5.4cm] (eep)  at (6.8,-2.3) {绑定硬件描述符 CRC-32\\写入 \texttt{U21 P24C02A}（地址 \texttt{0xA0..0xD7}）};
+  \node[thesisblock,text width=5.4cm] (seed) at (6.8,0) {上电自动校验并重载记录\\按当前导频幅度 Bessel 缩放 $M_{\mathrm{eff}}^{-1}$};
+  \draw[thesisarrow] (raw) -- (sign);
+  \draw[thesisarrow] (sign) -- (lsq);
+  \draw[thesisarrow] (lsq) -- (chol);
+  \draw[thesisarrow] (chol) -- (eep);
+  \draw[thesisarrow] (eep) -- (seed);
+\end{tikzpicture}
+\end{document}

@@ -1,0 +1,76 @@
+\documentclass[border=8pt]{standalone}
+\usepackage[fontset=fandol]{ctex}
+\usepackage{amsmath,amssymb}
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta,positioning,calc,fit,backgrounds}
+
+\definecolor{appbd}{HTML}{3B5B82}
+\definecolor{halbd}{HTML}{8A6D2D}
+\definecolor{drvbd}{HTML}{3A6F4C}
+\definecolor{rtbg}{HTML}{FBEFEF}
+\definecolor{rtbd}{HTML}{9E3B3B}
+
+\tikzset{
+  box/.style={
+    draw=#1,fill=white,rounded corners=2pt,align=center,
+    minimum width=3.65cm,minimum height=1.0cm,inner sep=4pt,
+    font=\small,line width=0.65pt
+  },
+  rtbox/.style={
+    draw=rtbd,fill=rtbg,rounded corners=2pt,align=center,
+    minimum width=3.65cm,minimum height=1.0cm,inner sep=4pt,
+    font=\small,line width=0.8pt
+  },
+  layer/.style={
+    draw=#1!65,fill=#1!8,rounded corners=4pt,inner sep=12pt,line width=0.7pt,dashed
+  },
+  arr/.style={-{Latex[length=2.1mm,width=1.4mm]},line width=0.75pt,draw=black!80},
+  darr/.style={-{Latex[length=2.1mm,width=1.4mm]},line width=0.75pt,dashed,draw=black!65},
+  lbl/.style={font=\scriptsize,fill=white,inner sep=1.5pt}
+}
+
+\begin{document}
+\begin{tikzpicture}
+  % Layer 1: App & Lib
+  \node[box=appbd] (main) at (0, 3.0) {\textbf{main.c}\\{\scriptsize OLED1 500 ms 刷新 / LED1 心跳}};
+  \node[box=appbd] (cli)  at (0, 1.55) {\textbf{cli\_service}\\{\scriptsize UART1 115200 bps (优先级 8)}};
+  \node[box=appbd] (ctrl) at (0, 0.05) {\textbf{ctrl\_thread}\\{\scriptsize 5 Hz 闭环与两遍校准 (优先级 5)}};
+  \node[box=appbd] (dsp)  at (0, -1.45) {\textbf{lib/dsp \& lib/control}\\{\scriptsize C11 Goertzel / LSQ / 观测器 / PI}};
+  \node[rtbox]     (rt)   at (0, -3.05) {\textbf{rt\_pipeline}\\{\scriptsize 64 kSPS DRDY\# ISR (15.625 $\mu$s)}};
+
+  % Layer 2: HAL Boundary
+  \node[box=halbd] (mcu)  at (6.0, 1.65) {\textbf{MCU 板卡层}\\{\scriptsize boards/xidian/biasctrl\_h503}\\{\scriptsize STM32H503CBT6 @ 250 MHz}};
+  \node[box=halbd] (ops)  at (6.0, -0.35) {\textbf{analog\_board\_ops\_t}\\{\scriptsize include/bias/analog\_board.h}\\{\scriptsize 子板无关操作虚表}};
+  \node[box=halbd] (eep)  at (6.0, -2.4) {\textbf{U21 描述符协议}\\{\scriptsize include/bias/eeprom\_schema.h}\\{\scriptsize CRC-32 板卡与校准绑定}};
+
+  % Layer 3: Drivers & Hardware
+  \node[box=drvbd] (oled) at (11.9, 2.35) {\textbf{eeprom\_board \& oled\_lite}\\{\scriptsize I2C1 400 kHz (bias\_i2c1\_mutex)}};
+  \node[box=drvbd] (mzm)  at (11.9, 0.80) {\textbf{20261110-MZM 后端}\\{\scriptsize drivers/analog\_board/mzm\_20261110.c}};
+  \node[box=drvbd] (dac)  at (11.9, -0.80) {\textbf{dac8568 (DAC8568)}\\{\scriptsize SPI1 12.5 MHz 异步无 IRQ DMA}};
+  \node[box=drvbd] (adc)  at (11.9, -2.40) {\textbf{ads131m02 (ADS131M02)}\\{\scriptsize SPI2 12.5 MHz 24-bit+CRC DMA}};
+
+  \begin{scope}[on background layer]
+    \node[layer=appbd,fit=(main)(rt),inner xsep=24pt,label={[font=\small\bfseries,text=appbd]above:应用与算法层 (app/ + lib/)}] {};
+    \node[layer=halbd,fit=(mcu)(eep),label={[font=\small\bfseries,text=halbd]above:双轴硬件抽象边界}] {};
+    \node[layer=drvbd,fit=(oled)(adc),label={[font=\small\bfseries,text=drvbd]above:驱动与硬件层 (drivers/)}] {};
+  \end{scope}
+
+  % App internal arrows (route around dsp box)
+  \draw[arr] (main.west) -- ++(-0.45,0) |- ([yshift=2mm]ctrl.west);
+  \draw[arr] (cli.west) -- ++(-0.30,0) |- (ctrl.west);
+  \draw[arr] (ctrl) -- (dsp);
+  \draw[arr] ([yshift=-2.5mm]ctrl.west) -- ++(-0.65,0) |- node[lbl,pos=0.25,left]{5 Hz 写偏压} ([yshift=1.5mm]rt.west);
+  \draw[arr] ([yshift=1.5mm]rt.east) -- ++(0.65,0) |- node[lbl,pos=0.25,right]{50 Hz k\_msgq} ([yshift=-2.5mm]ctrl.east);
+
+  % App <-> HAL <-> Drivers
+  \draw[arr] (main.east) -- ++(1.3,0) |- ([yshift=2mm]oled.west);
+  \draw[arr] (ctrl.east) -- ([yshift=1.5mm]ops.west);
+  \draw[arr] ([yshift=-1.5mm]rt.east) -- ++(1.15,0) |- ([yshift=-1.5mm]ops.west);
+  \draw[arr] (ops.east) -- ++(0.95,0) |- (mzm.west);
+  \draw[arr] (mzm.south) -- (dac.north);
+  \draw[arr] (mzm.east) -- ++(0.45,0) |- ([yshift=-2mm]oled.east);
+  \draw[arr] ([yshift=-3.2mm]rt.east) -- ++(1.5,0) |- ++(7.5,-0.55) -| ($(adc.south)+(-0.8,0)$);
+  \draw[darr] (mcu.east) -- ++(0.65,0) node[lbl,above]{DT/pinctrl} -- ++(0.35,0) |- ([yshift=2.5mm]adc.west);
+  \draw[darr] (eep.east) -- ++(1.05,0) |- ([yshift=-2.5mm]oled.west);
+\end{tikzpicture}
+\end{document}

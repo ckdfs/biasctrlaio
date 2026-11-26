@@ -1,0 +1,44 @@
+\documentclass[border=8pt]{standalone}
+\usepackage[fontset=fandol]{ctex}
+\usepackage{amsmath}
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta,positioning}
+
+\definecolor{optbg}{HTML}{F2F7FA}
+\definecolor{optbd}{HTML}{2E6B8A}
+\definecolor{elecbg}{HTML}{F7F4EC}
+\definecolor{elecbd}{HTML}{8A6A28}
+
+\tikzset{
+  opt/.style={draw=optbd,fill=optbg,rounded corners=2pt,align=center,minimum height=1.0cm,inner sep=5pt,font=\small,line width=0.7pt},
+  elec/.style={draw=elecbd,fill=elecbg,rounded corners=2pt,align=center,minimum height=1.0cm,inner sep=5pt,font=\small,line width=0.7pt},
+  oarr/.style={-{Latex[length=2.1mm,width=1.4mm]},line width=0.9pt,draw=optbd},
+  earr/.style={-{Latex[length=2.1mm,width=1.4mm]},line width=0.8pt,draw=elecbd},
+  darr/.style={-{Latex[length=2mm,width=1.3mm]},line width=0.75pt,dashed,draw=black!60},
+  lbl/.style={font=\scriptsize,fill=white,inner sep=2pt}
+}
+
+\begin{document}
+\begin{tikzpicture}
+  \node[opt,minimum width=2.3cm] (dfb) at (0,0) {\textbf{1550 nm DFB}\\{\scriptsize 连续波激光器}};
+  \node[opt,minimum width=2.0cm] (pc)  at (3.2,0) {\textbf{手动 PC}\\{\scriptsize 偏振对准}};
+  \node[opt,minimum width=2.8cm] (mzm) at (6.9,0) {\textbf{MZM / DPMZM}\\{\scriptsize 电光调制器}};
+  \node[opt,minimum width=2.5cm] (oc)  at (11.2,0) {\textbf{1:9 光耦合器}\\{\scriptsize 10\% 监测抽头}};
+  \node[opt,minimum width=2.9cm] (out) at (15.4,0) {\textbf{90\% 主光路输出}\\{\scriptsize 业务传输 / PBS 光谱}};
+
+  \node[opt,minimum width=2.8cm]  (pd)   at (11.2,-3.0) {\textbf{InGaAs PIN PD}\\{\scriptsize $\mathcal{R}\approx 0.90\ \mathrm{A/W}$}};
+  \node[elec,minimum width=3.2cm] (rx)   at (6.3,-3.0) {\textbf{20261110-MZM 前端}\\{\scriptsize CH0 47 k$\Omega$ TIA / CH1 直流}};
+  \node[elec,minimum width=3.1cm] (ctrl) at (1.2,-3.0) {\textbf{STM32H503 底板}\\{\scriptsize 64 kSPS 解调与 5 Hz PI}};
+
+  \draw[oarr] (dfb) -- (pc);
+  \draw[oarr] (pc) -- (mzm);
+  \draw[oarr] (mzm) -- (oc);
+  \draw[oarr] (oc) -- node[above=2pt,font=\scriptsize]{90\%} (out);
+  \draw[oarr] (oc) -- node[right=3pt,font=\scriptsize]{10\% 监测光} (pd);
+
+  \draw[earr] (pd) -- node[above=3pt,font=\scriptsize]{光电流 $i_{\mathrm{ph}}$} (rx);
+  \draw[earr] (rx) -- node[above=3pt,font=\scriptsize]{SPI2 / 24-bit} (ctrl);
+  \draw[earr] (ctrl.north) -- ++(0,1.05) -| node[pos=0.25,lbl]{VA/VB/VC 直流偏压 + DITHER1/2 导频} (mzm.south);
+  \draw[darr] (out.south) -- ++(0,-1.1) node[below,font=\scriptsize,align=center]{独立光参考支路\\(外部验收真值 $\phi_{\mathrm{ref}}$)};
+\end{tikzpicture}
+\end{document}

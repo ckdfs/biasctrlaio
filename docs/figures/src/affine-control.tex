@@ -1,0 +1,36 @@
+\documentclass[border=8pt]{standalone}
+\usepackage[fontset=fandol]{ctex}
+\usepackage{amsmath,amssymb}
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta,shapes.geometric}
+
+\tikzset{
+  thesisblock/.style={draw=black!75,rounded corners=2pt,align=center,
+    inner sep=5pt,minimum height=10mm,fill=gray!5,line width=0.65pt},
+  faultblock/.style={draw=red!55!black,rounded corners=2pt,align=center,
+    inner sep=5pt,minimum height=10mm,fill=red!4,line width=0.7pt},
+  thesisarrow/.style={-{Latex[length=2mm]},line width=0.75pt}
+}
+
+\begin{document}
+\begin{tikzpicture}[font=\small]
+  \node[thesisblock,text width=8.0cm] (cal) at (0,0) {加载 $U_{21}$ 校准参数；按 $J_k(m_{\mathrm{now}})/J_k(m_{\mathrm{cal}})$ 缩放 $M$ 并检查行列式奇异性};
+  \node[thesisblock,text width=8.0cm] (acq) at (0,-1.95) {64 kSPS DRDY\# ISR 采集 CH0/CH1（24-bit+CRC）；每 1280 点计算 Goertzel 并抽取至 5 Hz};
+  \node[draw=black!75,diamond,aspect=3.2,align=center,inner sep=1.5pt,minimum height=1.3cm,fill=gray!4] (clip) at (0,-4.35) {CRC 错误、SPI 超时、\\队列溢出或矢量半径 $<0.10$？};
+  \node[thesisblock,text width=8.0cm] (phase) at (0,-6.75) {仿射逆映射与单位圆归一化 $[\hat{u}_x,\hat{u}_y]$；叠加 $\sin^2(\phi^\star)$ 电压弹簧与 \texttt{obs\_dc} EMA 纠偏};
+  \node[draw=black!75,diamond,aspect=3.2,align=center,inner sep=1.5pt,minimum height=1.3cm,fill=gray!4] (check) at (0,-9.15) {5 项判据连续满足 25 拍？\\(\texttt{bias/observer/radius/error/phase})};
+  \node[thesisblock,text width=8.0cm] (ctrl) at (0,-11.55) {抗积分饱和 PI 更新输出偏压码（限幅在当前半周期 $[\mathrm{lo},\mathrm{hi}]$ 内），经 ISR 异步写入 DAC};
+  \node[faultblock,text width=3.1cm] (fault) at (-6.35,-4.35) {快速失败 \texttt{FAULT}\\切断导频并归零 VA\\等待 \texttt{reinit}};
+  \node[thesisblock,text width=3.1cm] (hold) at (6.35,-9.15) {置位 \texttt{locked=1}\\激活 \texttt{hold\_assist}};
+
+  \draw[thesisarrow] (cal) -- (acq);
+  \draw[thesisarrow] (acq) -- (clip);
+  \draw[thesisarrow] (clip) -- node[right=4pt]{否} (phase);
+  \draw[thesisarrow] (clip.west) -- node[above=3pt]{是} (fault.east);
+  \draw[thesisarrow] (phase) -- (check);
+  \draw[thesisarrow] (check) -- node[right=4pt]{否} (ctrl);
+  \draw[thesisarrow] (check.east) -- node[above=3pt]{是} (hold.west);
+  \draw[thesisarrow] (hold.south) |- ([yshift=2mm]ctrl.east);
+  \draw[thesisarrow] (ctrl.west) -- ++(-2.0,0) |- (acq.west);
+\end{tikzpicture}
+\end{document}

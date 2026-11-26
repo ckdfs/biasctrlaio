@@ -1,0 +1,45 @@
+\documentclass[border=8pt]{standalone}
+\usepackage[fontset=fandol]{ctex}
+\usepackage{amsmath}
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta,positioning}
+
+\tikzset{
+  thesisblock/.style={draw=black!75,rounded corners=2pt,align=center,
+    inner sep=5pt,minimum height=9.5mm,fill=gray!5,line width=0.65pt},
+  bypassblock/.style={draw=black!55,dashed,rounded corners=2pt,align=center,
+    inner sep=5pt,minimum height=9.5mm,fill=orange!5,line width=0.65pt},
+  thesisarrow/.style={-{Latex[length=2mm]},line width=0.75pt}
+}
+
+\begin{document}
+\begin{tikzpicture}[font=\footnotesize]
+  \node[thesisblock,text width=2.0cm] (pos) at (0,2.1) {底板外部\\$+15~\mathrm{V}$};
+  \node[thesisblock,text width=2.0cm] (usb) at (0,0) {调试 USB\\$5~\mathrm{V}$};
+  \node[thesisblock,text width=2.0cm] (neg) at (0,-2.1) {底板外部\\$-15~\mathrm{V}$};
+
+  \node[thesisblock,text width=3.2cm] (pldo) at (4.4,2.1) {TPS7A4901 (U1)\\$+12~\mathrm{V}$ 模拟\\供 OPA4192ID};
+  \node[thesisblock,text width=3.4cm] (buck) at (4.4,0) {LMR51430 (U3, R9 改)\\$\mathrm{VSYS}=5.339~\mathrm{V}$};
+  \node[thesisblock,text width=3.2cm] (nldo) at (4.4,-2.1) {TPS7A3001 (U2)\\$-12~\mathrm{V}$ 模拟\\供 OPA4192ID};
+
+  \node[bypassblock,text width=3.4cm] (a5) at (9.6,2.1) {MZM U7 已拆除旁路\\VSYS 直供 $+5~\mathrm{V}$};
+  \node[thesisblock,text width=3.4cm] (d3) at (9.6,0) {TPS7A2033 (底板/MZM U5)\\$3.3~\mathrm{V_D}$ 数字};
+  \node[thesisblock,text width=3.4cm] (a3) at (9.6,-2.1) {TPS7A2033 (MZM U6)\\$3.3~\mathrm{V_A}$ 模拟};
+
+  \node[text width=4.1cm,align=left,anchor=west] (l5) at (12.0,2.1) {DAC8568、PD 反偏\\（原规划经 TPS7A2050）};
+  \node[text width=4.1cm,align=left,anchor=west] (ld) at (12.0,0) {STM32H503CBT6、OLED1\\P24C02A、ADC 数字电源};
+  \node[text width=4.1cm,align=left,anchor=west] (la) at (12.0,-2.1) {ADS131M02 模拟电源};
+
+  \draw[thesisarrow] (pos) -- (pldo);
+  \draw[thesisarrow] (neg) -- (nldo);
+  \draw[thesisarrow] (usb) -- (buck);
+  \draw[thesisarrow] (pos.south east) -- ++(0.65,0) |- ([yshift=2mm]buck.west);
+  \draw[thesisarrow] (buck.east) -- (6.9,0) |- node[pos=0.72,above=2pt,font=\scriptsize]{FPC2 直通} (a5.west);
+  \draw[thesisarrow] (buck.east) -- (d3.west);
+  \draw[thesisarrow] (buck.east) -- (6.9,0) |- (a3.west);
+  \draw[thesisarrow] (a5) -- (l5);
+  \draw[thesisarrow] (d3) -- (ld);
+  \draw[thesisarrow] (a3) -- (la);
+  \draw[dashed,thesisarrow] (d3.south) -- node[right]{上电使能顺序} (a3.north);
+\end{tikzpicture}
+\end{document}

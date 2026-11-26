@@ -17,10 +17,12 @@
 
 ## 2. 硬件组成、接线与当前原型飞线状态
 
+板间引脚与电源测试点见[电气设计](design/electrical.md)，机械装配与外壳步骤见[机械与外壳设计](design/mechanical.md)，返修位置见[PCB 勘误](design/pcb-errata.md)。
+
 ### 2.1 板卡连接与供电
 1. 通过 `30-pin FPC2` 排线连接数字底板 `20261110-底板` 与模拟子板 `20261110-MZM`（连接前断电确认防呆与方向）。
 2. **当前原型实板硬件改造状态（已验证基线）**：
-   - **底板 `+5V` 供电**：拆除 `U7 (TPS7A2050)`，调整 `U3 (LMR51430)` 反馈电阻 `R9` 使 `VSYS = 5.339 V`（低于 `DAC8568` 最大耐压 `5.5 V`）后直接飞线供 `+5V`。
+   - **跨板 `+5V` 供电**：拆除模拟子板 `U7 (TPS7A2050)` 并旁路，调整底板 `U3 (LMR51430)` 反馈电阻 `R9` 使 `VSYS = 5.339 V`（低于 `DAC8568` 最大耐压 `5.5 V`）后直接飞线供 `+5V`。
    - **模拟子板直连双导频飞线**：拆除全部 4 颗 `TS5A23159` 模拟开关（`U14 / U16 / U17 / U20`），固定飞线连接为：
      - `U10.7 (DAC8568 CH6 DITHER1)` -> `C48.1`（叠加至偏压通道 `VA`）
      - `U10.10 (DAC8568 CH7 DITHER2)` -> `C56.1`（叠加至偏压通道 `VC`）
@@ -38,7 +40,7 @@
 
 ## 3. 编译环境、固件烧录与自动化测试
 
-首次拉取仓库后按系统类型执行一次初始化（详参 [README.md](file:///Users/ckdfs/code/biasctrlaio/README.md)）：
+首次拉取仓库后按系统类型执行一次初始化（详参 [README.md](../README.md)）：
 - macOS / Linux：`./scripts/bootstrap.sh && source scripts/env.sh`
 - Windows PowerShell：`.\scripts\bootstrap.ps1` 后运行 `. .\scripts\env.ps1`
 
@@ -116,7 +118,7 @@ stop: ok
 
 ## 5. 串口 CLI 命令与 `status` 字段参考
 
-### 5.1 命令列表（来自 [cli_service.c](file:///Users/ckdfs/code/biasctrlaio/app/src/cli_service.c)）
+### 5.1 命令列表（来自 [cli_service.c](../app/src/cli_service.c)）
 | 命令 | 功能说明 | 前置状态要求 | 典型成功返回 |
 | --- | --- | --- | --- |
 | `help` | 打印全部 CLI 命令列表 | 任意 | 命令清单 |

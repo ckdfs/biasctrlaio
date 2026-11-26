@@ -1,0 +1,32 @@
+\documentclass[border=8pt]{standalone}
+\usepackage[fontset=fandol]{ctex}
+\usepackage{amsmath}
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta,positioning}
+
+\tikzset{
+  thesisblock/.style={draw=black!75,rounded corners=2pt,align=center,
+    inner sep=5pt,minimum height=9.5mm,fill=gray!5,line width=0.65pt},
+  thesisarrow/.style={-{Latex[length=2mm]},line width=0.75pt}
+}
+
+\begin{document}
+\begin{tikzpicture}[font=\small]
+  \node[thesisblock,text width=1.9cm] (laser) at (0,0) {连续光源\\$E_{\mathrm{in}}(t)$};
+  \node[draw=black!75,circle,minimum size=9.5mm,fill=gray!5] (split) at (2.2,0) {分束};
+  \node[thesisblock,text width=3.4cm] (arm1) at (5.4,1.2) {上臂：$a_1 e^{j\varphi_1(t)}$};
+  \node[thesisblock,text width=3.4cm] (arm2) at (5.4,-1.2) {下臂：$a_2 e^{j\varphi_2(t)}$};
+  \node[draw=black!75,circle,minimum size=9.5mm,fill=gray!5] (join) at (8.6,0) {合束};
+  \node[thesisblock,text width=2.6cm] (pd) at (11.6,0) {光电探测\\$i_{\mathrm{ph}}=\mathcal{R}P_{\mathrm{out}}$};
+  \draw[thesisarrow] (laser) -- (split);
+  \draw[thesisarrow] (split) |- (arm1);
+  \draw[thesisarrow] (split) |- (arm2);
+  \draw[thesisarrow] (arm1) -| (join);
+  \draw[thesisarrow] (arm2) -| (join);
+  \draw[thesisarrow] (join) -- node[above=2pt]{$E_{\mathrm{out}}(t)$} (pd);
+  \node[align=center] at (5.8,-2.55) {
+    $\phi(t)=\varphi_1(t)-\varphi_2(t)=\phi_b(t)+\xi(t)+\phi_{\mathrm{RF}}(t),\quad \phi_{\mathrm{fw}}=\phi+\pi\ (\mathrm{MIN}=0^\circ)$\\
+    $P_{\mathrm{out}}(t)=\dfrac{P_L}{2}\bigl[1+\nu\cos\phi(t)\bigr]=\dfrac{P_L}{2}\bigl[1-\nu\cos\phi_{\mathrm{fw}}(t)\bigr],\quad I_0=\dfrac{\mathcal{R}P_L}{2}$
+  };
+\end{tikzpicture}
+\end{document}

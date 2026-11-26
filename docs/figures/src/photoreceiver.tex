@@ -1,0 +1,31 @@
+\documentclass[border=8pt]{standalone}
+\usepackage[fontset=fandol]{ctex}
+\usepackage{amsmath}
+\usepackage{tikz}
+\usepackage[european]{circuitikz}
+\usetikzlibrary{positioning,calc}
+
+\begin{document}
+\begin{circuitikz}[font=\small,european resistors]
+  \ctikzset{bipoles/length=0.95cm,resistors/scale=.68,capacitors/scale=.68,diodes/scale=.55}
+  \draw (4.5,0) node[op amp,anchor=-](T){};
+  \node[below=3.5mm of T.down,align=center]{U12A\\OPA4192ID};
+  \draw (0,0) coordinate(a) to[pD,l_=PD] (0,2.05) node[vcc]{$+5~\mathrm{V_A}$};
+  \draw (a) to[C,l^=$C_{37}$,a_=100~nF\ C0G,*-] (3.2,0) coordinate(n) -- (T.-);
+  \draw (T.+) -- ++(-.35,0) node[ground]{};
+  \coordinate (o) at ($(T.out)+(.35,0)$);
+  \draw (n) node[circ]{} -- ++(0,1.65) coordinate(f) to[R,l^=$R_{17}$,a_=47~k$\Omega$] (o |- f) coordinate(fo);
+  \draw (f) node[circ]{} -- ++(0,1.55) coordinate(fc) to[C,l^=$C_{39}\ (10~\mathrm{pF\ C0G})$] (o |- fc) -- (fo) node[circ]{};
+  \draw (T.out) -- (o) node[circ]{} -- (fo);
+  \draw (o) to[R,l^=$R_{18}$,a_=820~$\Omega$] ++(2.2,0) coordinate(cl) to[R,l^=$R_{91}$,a_=180~$\Omega$] ++(2.2,0) coordinate(ac) to[short,-o] ++(1.1,0) node[right,align=left]{ADC CH0\\交流谐波 ($\pm 1.2$ V)};
+  \draw (cl) to[short,*-] ++(0,-0.35) coordinate(dtop);
+  \draw (dtop) -- ++(-0.35,0) to[D,bipoles/length=0.72cm] ++(0,-0.8) to[D,bipoles/length=0.72cm] ++(0,-0.8) coordinate(dl);
+  \draw (dtop) -- ++(0.35,0) to[D,bipoles/length=0.72cm,invert] ++(0,-0.8) to[D,bipoles/length=0.72cm,invert] ++(0,-0.8) coordinate(dr);
+  \draw (dl) -- (dr);
+  \draw ($(dl)!0.5!(dr)$) node[ground]{};
+  \node[right=1.8mm of dr,yshift=6mm,align=left,font=\footnotesize] {$D_1$\\BAV199DW\\($\le 5~\mathrm{nA}$)};
+  \draw (ac) to[C,l=$C_{41}\ (10~\mathrm{nF\ C0G})$,*-] ++(0,-1.95) node[ground]{};
+  \draw (a) to[R,l_=$R_{15}$,a^=5~k$\Omega$] ++(0,-1.85) coordinate(dc) to[R,l_=$R_{16}$,a^=3.3~k$\Omega$] ++(0,-1.85) node[ground]{};
+  \draw (dc) to[short,*-] (1.35,-1.85) -- (1.35,-3.9) to[R,l^=$R_{21}\ (1~\mathrm{k}\Omega)$] (4.3,-3.9) -- (10.9,-3.9) to[short,-o] (11.4,-3.9) node[right,align=left]{ADC CH1\\直流锚点};
+\end{circuitikz}
+\end{document}
