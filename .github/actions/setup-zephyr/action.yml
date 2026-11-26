@@ -10,6 +10,25 @@ runs:
         echo "ZEPHYR_BASE=$PWD/deps/zephyr" >> "$GITHUB_ENV"
         git config --global --add safe.directory "$PWD"
 
+        if [[ -z "${ZEPHYR_SDK_INSTALL_DIR:-}" ]]; then
+          sdk_cfg="$(find /opt/toolchains /opt /usr/local -maxdepth 4 -name 'Zephyr-sdkConfig.cmake' 2>/dev/null | sort -V | tail -n 1 || true)"
+          if [[ -z "${sdk_cfg}" ]]; then
+            echo "::error::Zephyr-sdkConfig.cmake not found under /opt/toolchains, /opt, or /usr/local"
+            ls -la /opt /opt/toolchains 2>/dev/null || true
+            exit 1
+          fi
+          sdk_dir="$(cd "$(dirname "${sdk_cfg}")/.." && pwd)"
+          echo "ZEPHYR_SDK_INSTALL_DIR=${sdk_dir}" >> "$GITHUB_ENV"
+        else
+          sdk_dir="${ZEPHYR_SDK_INSTALL_DIR}"
+        fi
+        echo "Using ZEPHYR_SDK_INSTALL_DIR=${sdk_dir}"
+        for bin_dir in "${sdk_dir}/hosttools/usr/bin" "${sdk_dir}/gnu/arm-zephyr-eabi/bin" "${sdk_dir}/arm-zephyr-eabi/bin"; do
+          if [[ -d "${bin_dir}" ]]; then
+            echo "${bin_dir}" >> "$GITHUB_PATH"
+          fi
+        done
+
     - uses: actions/cache@v4
       id: workspace
       with:
