@@ -1,0 +1,83 @@
+name: CI
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+  workflow_call:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  hygiene-and-docs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+        run: |
+          args=()
+          if [[ -n "$BASE" ]]; then
+            args+=(--diff-base "$BASE" --summary-file "$GITHUB_STEP_SUMMARY")
+          fi
+          python3 scripts/check_repo_hygiene.py "${args[@]}"
+
+  host-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: |
+          mkdir -p .agent-bridge/tmp
+          export TMPDIR="$PWD/.agent-bridge/tmp"
+          python -m pip install 'pytest>=8'
+          python -m pytest tests/host
+          cmake -S tests/host -B build/host
+          cmake --build build/host
+          ctest --test-dir build/host --output-on-failure
+
+  zephyr-build-and-budget:
+    runs-on: ubuntu-latest
+    container: ghcr.io/zephyrproject-rtos/ci:latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup-zephyr
+      - shell: bash
+        run: |
+          west build -b biasctrl_h503 -d build/h503 app -- -DCONFIG_BUILD_OUTPUT_HEX=y -DCONFIG_BUILD_OUTPUT_BIN=y
+          cd build/h503/zephyr
+          for ext in elf hex bin map; do test -s "zephyr.$ext"; done
+      - shell: bash
+        run: |
+          python3 scripts/check_mem_budget.py --elf build/h503/zephyr/zephyr.elf | tee .agent-bridge/budget.txt
+          {
+            echo '| Memory | Used (B) | Limit (B) |'
+            echo '| --- | ---: | ---: |'
+            awk '/^(Flash|RAM):/ { sub(/:/, "", $1); print "|", $1, "|", $2, "|", $4, "|" }' .agent-bridge/budget.txt
+          } >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: biasctrl_h503
+          if-no-files-found: error
+          path: |
+            build/h503/zephyr/zephyr.elf
+            build/h503/zephyr/zephyr.hex
+            build/h503/zephyr/zephyr.bin
+            build/h503/zephyr/zephyr.map
+
+  zephyr-ztest:
+    runs-on: ubuntu-latest
+    container: ghcr.io/zephyrproject-rtos/ci:latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup-zephyr
+      - run: python3 scripts/run_qemu_ztest.py --build-dir build/ztest --pristine --timeout 180

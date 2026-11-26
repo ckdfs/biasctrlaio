@@ -1,0 +1,25 @@
+name: Prepare Zephyr workspace
+description: Initialize the pinned west workspace and restore manifest dependencies.
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      run: |
+        mkdir -p .agent-bridge/tmp
+        echo "TMPDIR=$PWD/.agent-bridge/tmp" >> "$GITHUB_ENV"
+        echo "ZEPHYR_BASE=$PWD/deps/zephyr" >> "$GITHUB_ENV"
+        git config --global --add safe.directory "$PWD"
+
+    - uses: actions/cache@v4
+      id: workspace
+      with:
+        path: |
+          deps
+          .west
+        key: west-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('manifest/west.yml') }}
+
+    - if: steps.workspace.outputs.cache-hit != 'true'
+      shell: bash
+      run: |
+        west init -l manifest
+        west update --narrow -o=--depth=1

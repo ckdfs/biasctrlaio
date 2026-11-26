@@ -1,0 +1,51 @@
+name: Draft firmware release
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Version tag for the selected commit (for example v1.0.0)
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    uses: ./.github/workflows/ci.yml
+
+  release:
+    needs: verify
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        with:
+          name: biasctrl_h503
+          path: firmware
+      - name: Package verified firmware and create draft
+        working-directory: firmware
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ inputs.tag || github.ref_name }}
+        run: |
+          git check-ref-format "refs/tags/$TAG"
+          if [[ "$TAG" != v* ]]; then
+            echo "::error::Release tags must start with v."
+            exit 1
+          fi
+          if git show-ref --verify --quiet "refs/tags/$TAG" &&
+             [[ "$(git rev-parse "refs/tags/${TAG}^{commit}")" != "$(git rev-parse HEAD)" ]]; then
+            echo "::error::The release tag points to a different commit than the verified firmware."
+            exit 1
+          fi
+          sha256sum zephyr.{elf,hex,bin,map} > SHA256SUMS.txt
+          gh release create "$TAG" zephyr.{elf,hex,bin,map} SHA256SUMS.txt \
+            --repo "$GITHUB_REPOSITORY" --target "$(git rev-parse HEAD)" --draft --generate-notes
