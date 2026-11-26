@@ -23,7 +23,11 @@ runs:
           sdk_dir="${ZEPHYR_SDK_INSTALL_DIR}"
         fi
         echo "Using ZEPHYR_SDK_INSTALL_DIR=${sdk_dir}"
-        for bin_dir in "${sdk_dir}/hosttools/usr/bin" "${sdk_dir}/gnu/arm-zephyr-eabi/bin" "${sdk_dir}/arm-zephyr-eabi/bin"; do
+        for bin_dir in \
+          "${sdk_dir}/hosttools/usr/bin" \
+          "${sdk_dir}"/hosttools/sysroots/*-pokysdk-linux/usr/bin \
+          "${sdk_dir}/gnu/arm-zephyr-eabi/bin" \
+          "${sdk_dir}/arm-zephyr-eabi/bin"; do
           if [[ -d "${bin_dir}" ]]; then
             echo "${bin_dir}" >> "$GITHUB_PATH"
           fi

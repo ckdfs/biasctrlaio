@@ -66,9 +66,14 @@ def main():
         parser.error("--timeout must be positive")
     sdk = os.environ.get("ZEPHYR_SDK_INSTALL_DIR")
     if sdk:
-        hosttools = Path(sdk) / "hosttools/usr/bin"
-        if hosttools.is_dir():
-            os.environ["PATH"] = str(hosttools) + os.pathsep + os.environ["PATH"]
+        sdk_path = Path(sdk)
+        candidates = [
+            sdk_path / "hosttools/usr/bin",
+            *sorted((sdk_path / "hosttools").glob("sysroots/*-pokysdk-linux/usr/bin")),
+        ]
+        extra_paths = [str(p) for p in candidates if p.is_dir()]
+        if extra_paths:
+            os.environ["PATH"] = os.pathsep.join([*extra_paths, os.environ["PATH"]])
     for tool in ("west", "qemu-system-arm"):
         if not shutil.which(tool):
             sys.exit(f"Required executable missing from PATH: {tool}")
