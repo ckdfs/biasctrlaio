@@ -17,3 +17,6 @@ This project builds a Zephyr RTOS v4.5.0 split-board electro-optic modulator bia
    - Never call blocking I2C/UART/sleep functions from `64 kSPS` `DRDY#` ISR paths.
    - Respect STM32H503CBT6 limits: static RAM `<= 24576 B`, Flash `<= 110592 B`.
    - Do not flash or drive physical hardware unless executing a human-approved verification task.
+6. **Documentation Synchronization (Mandatory)**:
+   - Every change to hardware configuration/wiring, architecture, interfaces, DSP/control algorithms, firmware features, CLI/UI behavior, or resource budgets MUST update `docs/design.md` (including its changelog), `docs/user-guide.md` (when wiring, build/flash workflow, CLI/UI usage, or troubleshooting changes), and `README.md` (when top-level status, doc links, or commands change) in the same change/commit.
+   - `codex_board_review` MUST verify that required documentation updates are present before approving any task.
