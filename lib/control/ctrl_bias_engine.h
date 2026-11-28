@@ -33,13 +33,19 @@ dsp_status_t ctrl_bias_engine_set_mzm_pilot(ctrl_bias_engine_t *e, float amplitu
 dsp_status_t ctrl_bias_engine_feed(ctrl_bias_engine_t *e, float ch0, float ch1, bool *ready);
 
 /* Zero-initialize for pass 1. Supply increasing voltages and one settled
- * demodulated window per voltage. The receiver polarity identifies which
- * alternating H1 valley is dark (signed H2 Q is positive or negative there). */
+ * demodulated window per voltage. Pass 1 extracts principal-axis angles and
+ * Vpi; Pass 2 fits the Fitzgibbon ellipse + CH1 DC regression (with fallback
+ * to dsp_online_lsq when CH1 dc_span <= 1 mV). */
 typedef struct {
     dsp_vpi_tracker_t tracker;
     dsp_online_lsq_t lsq;
-    float previous_q, first_valley_q, null_v, vpi;
-    bool fitting;
+    dsp_complex_cov_t cov[2];
+    dsp_fitzgibbon_t fitz;
+    float h1_ref_phase, h2_ref_phase;
+    float dc_min, dc_max, dc_span;
+    float previous_q, first_valley_q, previous_dc, first_valley_dc;
+    float prev_fit_v, null_v, vpi;
+    bool fitting, has_ref_phases, has_sample, has_fit_sample;
 } ctrl_bias_scan_t;
 
 _Static_assert(sizeof(ctrl_bias_scan_t) < 1024, "Calibration scan exceeds RAM budget");

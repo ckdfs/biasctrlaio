@@ -34,6 +34,8 @@ static const char *oled_state_str(ctrl_state_t state)
 		return "SCAN";
 	case CTRL_STATE_CAL:
 		return "CAL";
+	case CTRL_STATE_EXP_HOLD:
+		return "HOLD";
 	case CTRL_STATE_RUNNING:
 		return "RUN";
 	case CTRL_STATE_FAULT:
@@ -115,7 +117,7 @@ static void render_oled_if_changed(int board_rc, int keys_rc, int cli_rc,
 	}
 
 	oled_lite_clear();
-	(void)oled_lite_text(0, 0, "BIASCTRL H503 P4");
+	(void)oled_lite_text(0, 0, "BIASCTRL H503 P7");
 	(void)oled_lite_text(0, 16, next[0]);
 	(void)oled_lite_text(0, 32, next[1]);
 	(void)oled_lite_text(0, 48, next[2]);
@@ -138,7 +140,7 @@ int main(void)
 		led_ready = true;
 	}
 
-	printk("\nbiasctrl_h503 Phase 4, SYSCLK %u Hz\n",
+	printk("\nbiasctrl_h503 Phase 7, SYSCLK %u Hz\n",
 	       (unsigned int)DT_PROP(DT_NODELABEL(rcc), clock_frequency));
 
 	int board_rc = (ops != NULL && ops->init != NULL) ? ops->init() : -ENODEV;

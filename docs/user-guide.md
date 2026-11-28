@@ -83,7 +83,7 @@ python3 scripts/check_repo_hygiene.py --working-tree --strict-doc-sync
 
 ## 4. 首次启用与单 MZM 闭环锁定操作流程
 
-通过串口终端（`115200 8N1`，以 `\r` 或 `\n` 结尾）连接后，应看到提示符 `Phase 4 CLI ready. Type 'help'.` 与 `> `。
+通过串口终端（`115200 8N1`，以 `\r` 或 `\n` 结尾）连接后，应看到提示符 `Phase 7 CLI ready. Type 'help'.` 与 `> `。
 
 ### 4.1 首次初始化子板 EEPROM（新模拟板或更换参数时执行）
 ```text
@@ -134,23 +134,26 @@ stop: ok
 | `target min` | 设定目标为暗谷点（`0.000°`） | `IDLE` | `target: ok` |
 | `target max` | 设定目标为峰点（`180.000°`） | `IDLE` | `target: ok` |
 | `target custom <deg>` | 设定任意相位目标（十进制度数） | `IDLE` | `target: ok` |
-| `start` | 启动 `64 kSPS` 采集与 `5 Hz` 闭环锁定 | `IDLE` 且 `cal=1` | `start: ok` |
+| `ctrl cfg` | 打印当前闭环参数配置 | 任意 | `pilot=... mV wait=...` |
+| `ctrl cfg <param> <val>` | 配置 `pilot`(mV)/`wait`(0..25)/`avg`(1..16)/`gain`/`kp`/`ki`/`recal`(0\|1)/`rho_thresh`/`hold_ticks` | `IDLE` | `ctrl cfg: ok` |
+| `start` | 启动 `64 kSPS` 采集与配置周期的闭环锁定（默认 `159.2 mV` 导频、`T_wait=3` 块） | `IDLE` 且 `cal=1` | `start: ok` |
 | `stop` | 停止闭环与实时采集，并将 `VA` 归零 | `SCAN/CAL/RUNNING` | `stop: ok` |
-| `save` | 将当前校准记录写入 `U21`（字节 `160..215`） | `IDLE` 且 `cal=1` | `save: ok` |
+| `save` | 将当前 `MZM2` 校准记录写入 `U21`（字节 `160..223`） | `IDLE` 且 `cal=1` | `save: ok` |
 | `load` | 从 `U21` 重新读取并校验描述符及校准记录 | `IDLE` | `load: ok` |
 | `reinit` | 重新初始化模拟子板、`rt_pipeline` 与故障状态 | `IDLE` 或 `FAULT` | `reinit: ok` / `uncalibrated` |
 | `eeprom init` | 写入 `20261110-MZM` 默认板卡描述符至 `U21` | 非运行/非扫描态 | `eeprom init: ok crc=0x...` |
 
 ### 5.2 `status` 输出字段解释
 ```text
-state=RUNNING init=1 target=QUAD(90.000 deg) cal=1 locked=1 hold_assist=1
+state=RUNNING init=1 target=QUAD(90.000 deg) cal=1 locked=1 hold_assist=1 frozen=0 recal=0
 bias=-340 mV scan_vpi=0 mV vpi=5382 mV null=-3029 mV updates=46 pass=0 step=0
 harmonics h1=355.394 mV@-2.287 rad h2=0.311 mV@2.447 rad dc=418.561 mV
 drops=0 crc_errs=0 fault=0 cleanup_err=0 load_err=0 rt_fault=0
 ```
-- `state`：`IDLE`（空闲）/ `SCAN`（仅测 Vpi）/ `CAL`（两遍校准）/ `RUNNING`（闭环锁定）/ `FAULT`（已触发安全切断）。
-- `locked=1`：同时满足 `bias_ok`、`observer_ok`、`radius_ok`、`error_ok`、`phase_ok` 五项锁定判据；连续 25 次（`5 s`）满足后 `hold_assist=1`。
-- `harmonics`：`h1`/`h2` 为 `ADS131M02 CH0`（交流通道）`1 kHz`/`2 kHz` 幅值与相位；`dc` 为 `CH1` 监测通道直流均值（仅用于监测，不参与相位闭环反馈）。
+- `state`：`IDLE`（空闲）/ `SCAN`（仅测 Vpi）/ `CAL`（两遍校准）/ `RUNNING`（闭环锁定）/ `EXP_HOLD`（实验保持态）/ `FAULT`（已触发安全切断）。
+- `locked=1`：同时满足 `observer_ok`、`radius_ok`（`r >= 0.15`）、`error_ok`、`phase_ok` 四项锁定判据；连续 25 次满足后 `hold_assist=1`。热漂移不再受 `0.30*Vpi` 偏置窗误判限制。
+- `frozen=1`：当回拉半径 `r < 0.15`（接近 $J_0(m_{\mathrm{RF}})=0$ 零点或光强跌落）时冻结偏压与积分器，保持输出不进 `FAULT`；`recal` 记录自动重校准次数。
+- `harmonics`：`h1`/`h2` 为 `ADS131M02 CH0`（交流通道）`1 kHz`/`2 kHz` 幅值与相位；`dc` 为 `CH1` 监测通道直流均值（仅用于校准回归与监测，不直接充当闭环反馈）。
 - `drops` / `crc_errs` / `fault` / `rt_fault`：正常运行时四项必须持续为 `0`。
 
 ---
@@ -158,7 +161,7 @@ drops=0 crc_errs=0 fault=0 cleanup_err=0 load_err=0 rt_fault=0
 ## 6. OLED 显示、`LED1` 与常见故障排查
 
 ### 6.1 `OLED1`（`0x3C`）与 `LED1`（`PC13`）
-- **屏幕第 1 行**：固定显示 `BIASCTRL H503 P4`。
+- **屏幕第 1 行**：固定显示 `BIASCTRL H503 P7`。
 - **屏幕第 2–4 行**：
   - 正常/校准中：`ST:<IDLE|SCAN|CAL|RUN|FLT> CAL:<0|1> LCK:<0|1>`、`TGT:<QUAD|MIN|MAX|CUST> VA:<mV>`、`VPI:<mV> HA:<0|1>`（未校准时显示 `UNCAL LOAD:<err>`，故障时显示 `FLT:<err> CLN:<err>`）。
   - 初始化失败：`BRD:<rc> CTRL:<load_err>`、`KEYS:<rc> CLI:<rc>`、`RUN EEPROM INIT`。
@@ -178,10 +181,36 @@ drops=0 crc_errs=0 fault=0 cleanup_err=0 load_err=0 rt_fault=0
 
 ---
 
-## 7. 文档变更记录
+## 7. 实验串口采集
+
+以 `115200 8N1` 发送一条命令并等待同名的 `ok` 或 `err=<errno>` 结束行。以下三项诊断从空闲态执行。
+
+| 命令 | 返回值 |
+| --- | --- |
+| `hw info` | 系统时钟、实际 ADC 寄存器、U21 描述符与校准记录 CRC、校准校验结果及固件版本。H503 对应 250000000 Hz、ID 高字节 0x22、MODE 0x1111、CLOCK 0x0322。新板缺少有效校准时，仍输出已读寄存器和 CRC，结束行报告错误。 |
+| `adc stat 100000` | 允许 1000–1000000 个周期。导频归零后读取 n+1 个 DRDY 回调，以 n 个周期的总时长计算采样率。ADC_STAT 同时给出最短和最长周期（内核周期数）、丢块和 CRC 错误计数。 |
+| `adc dump 16384` | 允许 1–16384 个 CH0 原始有符号计数。每个 DUMP_SEG 给出从 0 起的段号、实际样本数和首样本的 32 位周期时间戳。DUMP_DATA 每行最多 16 点。每段至多 1280 点，最后一段可较短；FFT 按段计算，满段的频率分辨率为 50 Hz。 |
+
+`meas <bias_mv> <pilot_mv> <wait_blocks> <n_blocks>` 在块边界更新 VA 与导频，丢弃 0–250 个完整块后返回 1–2000 个连续块。VA 范围取自 U21 描述符，导频范围为 0–250 mV 峰值，支持小数。例如 `meas -3029 159.2 7 3` 在提交后等待 140 ms，再输出三个 20 ms 块。159.2 mV 使用标称 0.10 V/V 注入系数，对应 DAC 端 1.592 V 峰值。
+
+`step <v0_mv> <v1_mv> <pilot_mv> <n_blocks>` 保持 v0 共 15 个完整块（300 ms），在块边界提交 v1，立即输出随后 1–200 个块。两个电压均须在描述符范围内。两种命令结束后均进入或保持 `EXP_HOLD`，继续采样并维持最后的 VA 与导频。下一条测量可直接改值。执行 `stop` 结束采样并将 VA 恢复至 0 V。
+
+```text
+MEAS,seq,t_ms,bias_mv,code,pilot_mv,h1_i,h1_q,h2_i,h2_q,dc_mv,ch0_min_mv,ch0_max_mv,ch1_min_mv,ch1_max_mv,drops,crc
+STEP,seq,t_ms,bias_mv,code,pilot_mv,h1_i,h1_q,h2_i,h2_q,dc_mv,ch0_min_mv,ch0_max_mv,ch1_min_mv,ch1_max_mv,drops,crc
+TEL,k,t_ms,bias_mv,phi_hat_rad,err_rad,radius,h1_i,h1_q,h2_i,h2_q,dc_mv,locked,frozen,recal_count,drops,crc
+```
+
+以上为字段顺序，设备直接发送数据行。`seq` 从本次启动采样开始计数，`t_ms` 是块末的 32 位开机毫秒数。四个 I/Q 字段均为有符号整数 µV 峰值；`dc_mv` 是 CH1 均值，四个极值字段以 0.1 mV 输出。`code` 是实际提交的 VA DAC 码。每条数据行含 CRLF 最多 135 字节，在 115200 8N1 下占线最多 11.72 ms。
+
+`telemetry on` 启用闭环每次更新的 TEL 行，`telemetry off` 关闭。导出时终端暂停普通提示符和输入回显。`bias_mv` 是本观测窗口的偏压，I/Q、DC 取该控制窗口均值。`phi_hat_rad` 是固件暗零点坐标中的连续相位，`err_rad` 是目标减观测相位的圆周差。`frozen` 指示 `r < 0.15` 偏压冻结保护状态，`recal_count` 统计 `recal=1` 触发的自动重校准成功次数。
+
+## 8. 文档变更记录
 
 | 日期 | 版本 | 修改内容 | 对应阶段/任务 |
 | --- | --- | --- | --- |
 | 2026-11-26 | v1.0 | 新建用户使用手册，涵盖实板飞线基线、编译烧录测试、Phase 4 CLI 全流程、OLED/LED 指示及故障排查 | Phase 4 收尾 / 文档建档 |
 | 2026-11-26 | v1.1 | 补齐光路分束与监测功率核查要点、`H1 (PD IN)` 接线、`scripts/run_qemu_ztest.py` 测试入口及 `-33` 光饱和/偏振排查项 | 文档光-电一致性核查 |
 | 2026-11-26 | v1.2 | 在初始化与测试章节补充 `.githooks/pre-commit` 自动激活与 `--working-tree --strict-doc-sync` 文档同步检查说明 | Agent 文档同步规范化 |
+| 2026-11-26 | v1.3 | 增加实验诊断、同步测量、阶跃和闭环遥测的命令、范围、字段单位及保持态退出方法。 | Phase 7 / t1_fw_exp_cli |
+| 2026-11-26 | v1.4 | 新增 `ctrl cfg` 命令与 `RUNNING` 态 `T_wait` 丢块、冻结保护、自动重校准及 `MZM2` 存储说明。 | Phase 7 / t2_fw_thesis_affine |

@@ -43,8 +43,8 @@
 | --- | :---: | --- | --- |
 | `0x00 .. 0x93` | `148 B` | `struct bias_eeprom_descriptor_v1`（magic `0x53414942` `"BIAS"`，version `1`，`board_id="20261110-MZM"`，`tia_gain_ohms=47000`，`6` 通道增益/偏置/`vpi_uv`） | 尾部 `4 B` `CRC-32/ISO-HDLC`，由 `eeprom init` 或校准保存写入 |
 | `0x94 .. 0x9F` | `12 B` | 保留页对齐间隔 | — |
-| `0xA0 .. 0xD7` | `56 B` | `struct cal_mzm_record_v1`（magic `0x314D5A4D` `"MZM1"`，`descriptor_crc`，`dsp_affine_fit_t fit`，`null_v`，`vpi_v`，`cal_pilot_v`，`obs_dc_seed`，`has_obs_dc_seed`） | 尾部 `4 B` `CRC-32/ISO-HDLC`，且 `descriptor_crc` 必须匹配当前描述符 CRC |
-| `0xD8 .. 0xFF` | `40 B` | 预留扩展区 | — |
+| `0xA0 .. 0xDF` | `64 B` | `struct cal_mzm_record_v2`（magic `0x324D5A4D` `"MZM2"`，`descriptor_crc`，`dsp_affine_fit_t fit`，`null_v`，`vpi_v`，`cal_pilot_v`，`h1_ref_phase`，`h2_ref_phase`，`has_ref_phases`，`reserved`） | 尾部 `4 B` `CRC-32/ISO-HDLC`，且 `descriptor_crc` 必须匹配当前描述符 CRC |
+| `0xE0 .. 0xFF` | `32 B` | 预留扩展区 | — |
 
 ---
 
@@ -74,6 +74,23 @@
 
 ---
 
+## Phase 7 单 MZM 实验采集
+
+在 64 kSPS 下，每 1280 个有效帧构成一个 20 ms 块。DRDY 回调以整数比较更新 CH0、CH1 的极值。块末将极值转为伏特，从原有 Goertzel 的实部、虚部直接得到 H1、H2 的有符号峰值 I/Q，并保留幅相和 CH1 均值。控制线程从同一消息队列取得带序号、块末时间及实际导频幅度的块。
+
+`CTRL_STATE_EXP_HOLD` 与扫描、校准和闭环互斥。实验命令在块末通过现有 SPI1 DMA 提交 VA，下一块从新的导频幅度开始。`step` 的第二次提交由采样序号触发，恰好间隔 15 个块。控制线程检查序号，在等待主机下一条命令期间持续排空队列。UART 格式化和发送全部在线程中完成。停止或故障沿用切断路由、停 ADC、复位 VA 的清理路径。
+
+空闲诊断独占 ADC。`adc stat` 在 DRDY 回调内取 DWT CYCCNT，相邻读数按无符号 32 位求差，累加器为 64 位。测速期间保持内核运行，避免 WFI 暂停 CYCCNT。`adc dump` 复用单个 3840 B 静态缓冲区，以三字节保存每个 CH0 样本。每段停采后才打印，段内连续，段间包含串口输出和重新启动 ADC 所需时间。
+
+### Phase 7 复相量仿射校准与控制环升级
+
+单 MZM 校准与闭环升级为论文第 5 章复相量仿射形式：`cal bias` 在第一遍累加 12 个双精度复协方差统计量提取主轴相位 `(h1_ref_phase, h2_ref_phase)`，并在第二遍执行 `O(1)` 内存 `6×6` Fitzgibbon 椭圆拟合、环绕反射判定与 `CH1` 同步直流回归（`dc_span > 1 mV` 时代数锁定规范旋转与暗谷零点；`dc_span <= 1 mV` 时保留零直流仿真的 `dsp_online_lsq` 回退路径），持久化升级为 `U21` `64 B` `cal_mzm_record_v2`（`"MZM2"`）。`RUNNING` 闭环移除 `spring` 惩罚、`obs_dc` 自减与 `bias_delta <= 0.30` 锁定门限，改用纯圆周误差、`T_wait` 写后丢块（默认 `3` 块 = `60 ms`）、多块平均（默认 `1` 块）、默认 `159.2 mV` 导频、无量纲增益 `G` 换算、`r < 0.15` 冻结保护及圆残差 EMA `rho_ema` 自动重校准（通过 `ctrl cfg` 配置）。
+
+### Phase 7 资源基线与 C1–C6 实板实验归档
+
+- **STM32H503CBT6 资源占用（`build/h503_p7/zephyr/zephyr.elf`）**：`text=94,016 B, data=1,224 B, bss=19,406 B`；**Flash `95,240 / 110,592 B`（`86.1%`）**、**静态 RAM `20,630 / 24,576 B`（`83.9%`）**，全套真机实验全程 `drops=0, crc_errs=0`。
+- **C1–C6 实验归档与论文映射**：完整实测汇总、口径核对（`CLOCK=0x0322`、`20 MHz` 射频激励、余弦相位换算）及台架排除项见 [EXP-012 C1–C6 实板总汇与论文表格映射](experiments/reports/exp-012-thesis-c1-c6-summary.md)。
+
 ## 文档变更记录
 
 | 日期 | 版本 | 修改内容 | 对应阶段/任务 |
@@ -83,3 +100,6 @@
 | 2026-11-26 | v1.2 | 新增外壳与机械装配文档，导入物理/仿真图表，将架构图替换为 LaTeX TikZ 矢量 SVG。 | Phase 6 图形与结构补全 |
 | 2026-11-26 | v1.3 | 补齐系统架构中的光路域与光-电一体化闭环视角，更新架构矢量图并同步核查全仓设计文档与实验模板的跨域接口说明。 | 文档光-电一致性核查 |
 | 2026-11-26 | v1.4 | 建立五层 Agent 文档同步工作流：升级 `check_repo_hygiene.py` 严格检查，新增 `.agents/hooks.json`（`agent_doc_gate.py`）、`.githooks/pre-commit` 与 CI 严格门禁，同步规范 `AGENTS.md` 与 OpenSpec 规则。 | Agent 文档同步规范化 |
+| 2026-11-26 | v1.5 | 增加块级 I/Q、双通道极值、DWT 周期统计、分段原始采集与实验保持态。 | Phase 7 / t1_fw_exp_cli |
+| 2026-11-26 | v1.6 | 升级单 MZM 为第 5 章复相量仿射校准与纯圆周控制环，更新 `U21` `MZM2` `64 B` 布局、`T_wait` 丢块、`r < 0.15` 冻结及 `rho_ema` 自动重校准。 | Phase 7 / t2_fw_thesis_affine |
+| 2026-11-27 | v1.7 | 完成 C1–C6 实板实验全套采集与数据归档（EXP-007..EXP-012），更新 Phase 7 资源基线与论文第 3/5 章实测对照总汇。 | Phase 7 / t4..t9 |

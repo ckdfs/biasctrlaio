@@ -13,3 +13,9 @@ target_sources(app PRIVATE
   src/ctrl_thread.c
   src/cli_service.c
 )
+
+execute_process(COMMAND git describe --always --dirty --exclude "*"
+  WORKING_DIRECTORY ${CMAKE_CURRENT_LIST_DIR}
+  OUTPUT_VARIABLE firmware_revision OUTPUT_STRIP_TRAILING_WHITESPACE
+  COMMAND_ERROR_IS_FATAL ANY)
+target_compile_definitions(app PRIVATE BIAS_FW_REV="${firmware_revision}")

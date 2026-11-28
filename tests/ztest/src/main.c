@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: Apache-2.0 */
 #include "cal_service.h"
 #include "cli_service.h"
+#include "experiment_output.h"
 #include "ctrl_thread.h"
 #include "mocks.h"
 #include "rt_pipeline.h"
@@ -14,6 +15,7 @@
 #include <string.h>
 #include <zephyr/kernel.h>
 #include <zephyr/sys/atomic.h>
+#include <zephyr/sys/printk-hooks.h>
 #include <zephyr/ztest.h>
 
 extern struct k_msgq rt_pipeline_blocks;
@@ -23,7 +25,7 @@ extern struct k_msgq rt_pipeline_blocks;
 #define TEST_GAIN_PPM 4400000
 #define PLANT_VPI 3.7
 #define PLANT_DARK_V (-0.31)
-#define SCAN_PILOT_V 0.13f
+#define SCAN_PILOT_V 0.1592f
 
 static atomic_t rt_fault_cb_count;
 static int rt_fault_cb_err;
@@ -42,6 +44,7 @@ static void test_rt_fault_cb(int error, int cleanup_error)
 
 static double plant_power = 1.0;
 static double plant_drift_v;
+static bool plant_with_dc = true;
 
 static double bessel_jn(int n, double x)
 {
@@ -108,14 +111,17 @@ static rt_pipeline_block_t make_plant_block(uint32_t seq, float pilot_v)
 	apply_bilinear_rx(TEST_PI / 32.0, k_pole, h1_light_re, h1_light_im, &x1_re, &x1_im);
 	apply_bilinear_rx(TEST_PI / 16.0, k_pole, h2_light_re, h2_light_im, &x2_re, &x2_im);
 
+	double dc_v = plant_with_dc ? (0.40 * plant_power * (1.0 - cos(phi))) : 0.0;
+
 	return (rt_pipeline_block_t){
 		.harmonics = {
 			.h1_magnitude = (float)hypot(x1_re, x1_im),
 			.h2_magnitude = (float)hypot(x2_re, x2_im),
 			.h1_phase = (float)atan2(x1_im, x1_re),
 			.h2_phase = (float)atan2(x2_im, x2_re),
-			.dc_power = 0.0f,
+			.dc_power = (float)dc_v,
 		},
+		.iq = {x1_re, x1_im, x2_re, x2_im},
 		.seq = seq,
 		.timestamp_cycles = seq,
 		.pilot_amplitude_v = pilot_v,
@@ -148,6 +154,7 @@ static void feeder_entry(void *a, void *b, void *c)
 		float cached_pilot = -1.0f;
 		double cached_power = -1.0;
 		double cached_drift = 1e9;
+		bool cached_with_dc = !plant_with_dc;
 		rt_pipeline_block_t cached_blk = { 0 };
 		bool have_cache = false;
 
@@ -161,12 +168,14 @@ static void feeder_entry(void *a, void *b, void *c)
 				if (!have_cache || dc != cached_dc ||
 				    feeder_run_pilot_v != cached_pilot ||
 				    plant_power != cached_power ||
-				    plant_drift_v != cached_drift) {
+				    plant_drift_v != cached_drift ||
+				    plant_with_dc != cached_with_dc) {
 					cached_blk = make_plant_block(0U, feeder_run_pilot_v);
 					cached_dc = dc;
 					cached_pilot = feeder_run_pilot_v;
 					cached_power = plant_power;
 					cached_drift = plant_drift_v;
+					cached_with_dc = plant_with_dc;
 					have_cache = true;
 				}
 				rt_pipeline_block_t blk = cached_blk;
@@ -176,8 +185,7 @@ static void feeder_entry(void *a, void *b, void *c)
 
 				if (k_msgq_put(&rt_pipeline_blocks, &blk, K_NO_WAIT) == 0) {
 					feeder_seq++;
-					if ((blk.seq % DSP_CONTROL_DECIMATION) ==
-					    (DSP_CONTROL_DECIMATION - 1U)) {
+					if (rt_pipeline_dc_pending()) {
 						int rc = rt_pipeline_ingest(0, 0, 0, 0);
 
 						if (rc == -ESHUTDOWN || rc < 0) {
@@ -186,6 +194,13 @@ static void feeder_entry(void *a, void *b, void *c)
 					}
 				}
 			} else {
+				if (rt_pipeline_dc_pending()) {
+					int rc = rt_pipeline_ingest(0, 0, 0, 0);
+
+					if (rc == -ESHUTDOWN || rc < 0) {
+						break;
+					}
+				}
 				k_msleep(1);
 			}
 		}
@@ -276,6 +291,11 @@ ZTEST(p4_suite, test_rt_pipeline_handoff_and_pilot_boundary)
 	zassert_within(blk0.harmonics.h2_phase, (float)(-TEST_PI / 2.0), 1e-2f);
 	zassert_within(blk0.harmonics.dc_power, 0.42f, 1e-3f);
 
+	zassert_within(blk0.iq[0], 0.30f, 1e-3f);
+	zassert_within(blk0.iq[3], -0.15f, 1e-3f);
+	zassert_within(blk0.min_v[1], 0.42f, 1e-5f);
+	zassert_within(blk0.max_v[1], 0.42f, 1e-5f);
+
 	/* Block 1 should pick up 0.20 V pilot cleanly at sample 0. */
 	for (uint32_t n = 0; n < DSP_GOERTZEL_BLOCK_SIZE; ++n) {
 		zassert_ok(rt_pipeline_ingest(volts_to_adc_counts(0.10f),
@@ -287,6 +307,9 @@ ZTEST(p4_suite, test_rt_pipeline_handoff_and_pilot_boundary)
 	zassert_equal(blk1.seq, 1U);
 	zassert_within(blk1.pilot_amplitude_v, 0.20f, 1e-6f);
 	zassert_within(blk1.harmonics.dc_power, -0.20f, 1e-3f);
+
+	zassert_within(blk1.min_v[0], 0.10f, 1e-5f);
+	zassert_within(blk1.max_v[1], -0.20f, 1e-5f);
 
 	/* Peak DAC code for 0.20 V pilot at sample 16 (sin = +1) */
 	zassert_true(mock_state.pilot_code[0] != 32768U);
@@ -382,7 +405,7 @@ ZTEST(p4_suite, test_cal_service_roundtrip_crc_and_bounds)
 	zassert_equal(cal_service_voltage_bounds(&bad_desc, &lo, &hi), -EINVAL);
 	zassert_equal(cal_service_voltage_to_dac_code(&bad_desc, 0.0f, &code), -EINVAL);
 
-	/* 7-page save/load round-trip (56 B record -> 7 * 8 B pages) */
+	/* 8-page save/load round-trip (64 B MZM2 record -> 8 * 8 B pages) */
 	const ctrl_calibration_t cal_in = {
 		.fit = {
 			.o = { 0.001f, -0.002f },
@@ -390,14 +413,15 @@ ZTEST(p4_suite, test_cal_service_roundtrip_crc_and_bounds)
 		},
 		.null_v = -0.31f,
 		.vpi_v = 3.70f,
-		.cal_pilot_v = 0.13f,
-		.has_obs_dc_seed = true,
-		.obs_dc_seed = 0.25f,
+		.cal_pilot_v = 0.1592f,
+		.h1_ref_phase = -0.33f,
+		.h2_ref_phase = -1.708f,
+		.has_ref_phases = true,
 	};
 
 	mock_state.write_page_count = 0;
 	zassert_ok(cal_service_save(&mock_board_ops, &mock_storage_ops, &desc, &cal_in));
-	zassert_equal(mock_state.write_page_count, 7U);
+	zassert_equal(mock_state.write_page_count, 8U);
 	zassert_equal(desc.channels[0].vpi_uv, 3700000U);
 
 	struct bias_eeprom_descriptor_v1 desc_out;
@@ -407,8 +431,9 @@ ZTEST(p4_suite, test_cal_service_roundtrip_crc_and_bounds)
 	zassert_within(cal_out.null_v, cal_in.null_v, 1e-6f);
 	zassert_within(cal_out.vpi_v, cal_in.vpi_v, 1e-6f);
 	zassert_within(cal_out.cal_pilot_v, cal_in.cal_pilot_v, 1e-6f);
-	zassert_equal(cal_out.has_obs_dc_seed, cal_in.has_obs_dc_seed);
-	zassert_within(cal_out.obs_dc_seed, cal_in.obs_dc_seed, 1e-6f);
+	zassert_equal(cal_out.has_ref_phases, cal_in.has_ref_phases);
+	zassert_within(cal_out.h1_ref_phase, cal_in.h1_ref_phase, 1e-6f);
+	zassert_within(cal_out.h2_ref_phase, cal_in.h2_ref_phase, 1e-6f);
 	zassert_within(cal_out.fit.m[0][0], cal_in.fit.m[0][0], 1e-6f);
 
 	/* Corrupt descriptor byte -> -EBADMSG */
@@ -419,12 +444,24 @@ ZTEST(p4_suite, test_cal_service_roundtrip_crc_and_bounds)
 				       &desc_out, &cal_out), -EBADMSG);
 	mock_state.eeprom[30] = saved;
 
-	/* Corrupt cal_mzm_record_v1 byte -> -EBADMSG */
+	/* Corrupt cal_mzm_record_v2 byte -> -EBADMSG */
 	saved = mock_state.eeprom[170];
 	mock_state.eeprom[170] ^= 0xA5U;
 	zassert_equal(cal_service_load(&mock_board_ops, &mock_storage_ops,
 				       &desc_out, &cal_out), -EBADMSG);
 	mock_state.eeprom[170] = saved;
+
+	/* Legacy MZM1 magic must be rejected explicitly -> -EBADMSG */
+	mock_state.eeprom[160] = 0x4DU;
+	mock_state.eeprom[161] = 0x5AU;
+	mock_state.eeprom[162] = 0x4DU;
+	mock_state.eeprom[163] = 0x31U;
+	zassert_equal(cal_service_load(&mock_board_ops, &mock_storage_ops,
+				       &desc_out, &cal_out), -EBADMSG);
+	mock_state.eeprom[160] = 0x4DU;
+	mock_state.eeprom[161] = 0x5AU;
+	mock_state.eeprom[162] = 0x4DU;
+	mock_state.eeprom[163] = 0x32U;
 
 	/* Re-verify clean load */
 	zassert_ok(cal_service_load(&mock_board_ops, &mock_storage_ops, &desc_out, &cal_out));
@@ -439,6 +476,7 @@ ZTEST(p4_suite, test_ctrl_thread_cal_persist_lock_and_fault)
 	mock_reset_all();
 	plant_power = 1.0;
 	plant_drift_v = 0.0;
+	plant_with_dc = true;
 	mock_install_mzm_descriptor(TEST_OFFSET_UV, TEST_GAIN_PPM, 5000000U);
 
 	/* Valid descriptor + erased affine record -> returns -EBADMSG, remains initialized */
@@ -447,11 +485,7 @@ ZTEST(p4_suite, test_ctrl_thread_cal_persist_lock_and_fault)
 	ctrl_thread_status_t st;
 
 	zassert_ok(ctrl_thread_get_status(&st));
-	zassert_equal(st.state, CTRL_STATE_IDLE,
-		      "scan vpi state=%d fault=%d cln=%d step=%u upd=%u vpi_mv=%d",
-		      (int)st.state, st.fault, st.cleanup_error,
-		      (unsigned int)st.scan_step, (unsigned int)st.updates,
-		      (int)(st.scan_vpi_v * 1000.0f));
+	zassert_equal(st.state, CTRL_STATE_IDLE);
 	zassert_false(st.calibrated);
 	zassert_equal(st.load_error, -EBADMSG);
 
@@ -460,24 +494,16 @@ ZTEST(p4_suite, test_ctrl_thread_cal_persist_lock_and_fault)
 	start_feeder(SCAN_PILOT_V);
 	wait_ctrl_idle_or_fault(&st, 20000);
 	stop_feeder();
-	zassert_equal(st.state, CTRL_STATE_IDLE,
-		      "scan vpi state=%d fault=%d cln=%d step=%u upd=%u vpi_mv=%d",
-		      (int)st.state, st.fault, st.cleanup_error,
-		      (unsigned int)st.scan_step, (unsigned int)st.updates,
-		      (int)(st.scan_vpi_v * 1000.0f));
+	zassert_equal(st.state, CTRL_STATE_IDLE);
 	zassert_false(st.calibrated);
 	zassert_within(st.scan_vpi_v, (float)PLANT_VPI, 0.08f);
 
-	/* Two-pass cal bias */
+	/* Two-pass cal bias (Fitzgibbon + CH1 DC regression) */
 	zassert_ok(ctrl_thread_start_cal(true));
 	start_feeder(SCAN_PILOT_V);
 	wait_ctrl_idle_or_fault(&st, 20000);
 	stop_feeder();
-	zassert_equal(st.state, CTRL_STATE_IDLE,
-		      "scan vpi state=%d fault=%d cln=%d step=%u upd=%u vpi_mv=%d",
-		      (int)st.state, st.fault, st.cleanup_error,
-		      (unsigned int)st.scan_step, (unsigned int)st.updates,
-		      (int)(st.scan_vpi_v * 1000.0f));
+	zassert_equal(st.state, CTRL_STATE_IDLE);
 	zassert_true(st.calibrated);
 	zassert_within(st.vpi_v, (float)PLANT_VPI, 0.08f);
 	zassert_within(st.null_v, (float)PLANT_DARK_V, 0.08f);
@@ -533,9 +559,7 @@ ZTEST(p4_suite, test_ctrl_thread_cal_persist_lock_and_fault)
 
 		zassert_ok(ctrl_thread_stop());
 		zassert_ok(ctrl_thread_get_status(&st));
-		zassert_equal(st.state, CTRL_STATE_IDLE,
-		      "stop state=%d fault=%d cln=%d",
-		      (int)st.state, st.fault, st.cleanup_error);
+		zassert_equal(st.state, CTRL_STATE_IDLE);
 		zassert_within(st.bias_v, 0.0f, 1e-4f);
 	}
 
@@ -553,6 +577,7 @@ ZTEST(p4_suite, test_ctrl_thread_cal_persist_lock_and_fault)
 	zassert_equal(st.fault, -EIO);
 	zassert_false(st.locked);
 	zassert_false(st.hold_assist_active);
+	zassert_false(st.frozen);
 	zassert_true(mock_state.disconnect_count >= 1U);
 
 	uint16_t zero_code = 0;
@@ -566,11 +591,114 @@ ZTEST(p4_suite, test_ctrl_thread_cal_persist_lock_and_fault)
 	/* Explicit recovery */
 	zassert_ok(ctrl_thread_init(&mock_board_ops, &mock_storage_ops, true));
 	zassert_ok(ctrl_thread_get_status(&st));
-	zassert_equal(st.state, CTRL_STATE_IDLE,
-		      "scan vpi state=%d fault=%d cln=%d step=%u upd=%u vpi_mv=%d",
-		      (int)st.state, st.fault, st.cleanup_error,
-		      (unsigned int)st.scan_step, (unsigned int)st.updates,
-		      (int)(st.scan_vpi_v * 1000.0f));
+	zassert_equal(st.state, CTRL_STATE_IDLE);
+}
+
+static char telemetry_line[140];
+static size_t tel_chars;
+static int capture_telemetry_char(int c)
+{
+	if (tel_chars < sizeof(telemetry_line) - 1 &&
+	    (!tel_chars || telemetry_line[tel_chars - 1] != '\n')) {
+		telemetry_line[tel_chars++] = c;
+	}
+	return c;
+}
+
+ZTEST(p4_suite, test_ctrl_thread_freeze_and_auto_recal)
+{
+	mock_reset_all();
+	plant_power = 1.0;
+	plant_drift_v = 0.0;
+	plant_with_dc = true;
+	mock_install_mzm_descriptor(TEST_OFFSET_UV, TEST_GAIN_PPM, 5000000U);
+	zassert_equal(ctrl_thread_init(&mock_board_ops, &mock_storage_ops, true), -EBADMSG);
+
+	ctrl_thread_status_t st;
+
+	zassert_ok(ctrl_thread_start_cal(true));
+	start_feeder(SCAN_PILOT_V);
+	wait_ctrl_idle_or_fault(&st, 20000);
+	stop_feeder();
+	zassert_true(st.calibrated);
+
+	/* Configure fast auto-recal and 1-block wait for test verification. */
+	ctrl_thread_cfg_t cfg;
+
+	zassert_ok(ctrl_thread_get_cfg(&cfg));
+	cfg.wait_blocks = 1U;
+	cfg.avg_blocks = 1U;
+	cfg.recal_auto = true;
+	cfg.rho_thresh = 0.25f;
+	cfg.hold_ticks = 5U;
+	zassert_ok(ctrl_thread_set_cfg(&cfg));
+
+	zassert_ok(ctrl_thread_set_target(BIAS_POINT_QUAD, 90.0f));
+	zassert_ok(ctrl_thread_start());
+	start_feeder(SCAN_PILOT_V);
+
+	int64_t deadline = k_uptime_get() + 5000;
+
+	do {
+		zassert_ok(ctrl_thread_get_status(&st));
+		zassert_not_equal(st.state, CTRL_STATE_FAULT);
+		if (st.locked) {
+			break;
+		}
+		zassert_true(k_uptime_get() < deadline);
+		k_msleep(2);
+	} while (true);
+
+	/* Drop optical power below r < 0.15 -> frozen=true without FAULT, bias held. */
+	float bias_before_freeze = st.bias_v;
+
+	plant_power = 0.05;
+	deadline = k_uptime_get() + 2000;
+	do {
+		zassert_ok(ctrl_thread_get_status(&st));
+		zassert_equal(st.state, CTRL_STATE_RUNNING);
+		if (st.frozen) {
+			break;
+		}
+		zassert_true(k_uptime_get() < deadline);
+		k_msleep(2);
+	} while (true);
+
+	zassert_true(st.frozen && !st.locked);
+	zassert_within(st.bias_v, bias_before_freeze, 0.05f);
+
+	/* Verify TEL emits frozen=1 accurately while frozen. */
+	tel_chars = 0;
+	memset(telemetry_line, 0, sizeof(telemetry_line));
+	printk_hook_fn_t original = __printk_get_hook();
+
+	__printk_hook_install(capture_telemetry_char);
+	ctrl_thread_telemetry(true);
+	k_msleep(30);
+	ctrl_thread_telemetry(false);
+	__printk_hook_install(original);
+	zassert_true(!strncmp(telemetry_line, "TEL,", 4), "%s", telemetry_line);
+	zassert_not_null(strstr(telemetry_line, ",0,1,0,"), "expected locked=0,frozen=1,recal=0 in %s",
+			 telemetry_line);
+
+	/* Double power (r ~ 2.0 > 1 + 0.25) -> triggers autonomous recalibration & relocks. */
+	plant_power = 2.0;
+	deadline = k_uptime_get() + 20000;
+	do {
+		zassert_ok(ctrl_thread_get_status(&st));
+		zassert_not_equal(st.state, CTRL_STATE_FAULT);
+		if (st.recal_count >= 1U && st.state == CTRL_STATE_RUNNING && st.locked) {
+			break;
+		}
+		zassert_true(k_uptime_get() < deadline, "recal timeout state=%d recal=%u locked=%d",
+			     (int)st.state, (unsigned int)st.recal_count, st.locked ? 1 : 0);
+		k_msleep(5);
+	} while (true);
+
+	zassert_equal(st.recal_count, 1U);
+	zassert_false(st.frozen);
+	stop_feeder();
+	zassert_ok(ctrl_thread_stop());
 }
 
 /* =========================================================================
@@ -611,17 +739,52 @@ ZTEST(p4_suite, test_cli_service_commands)
 	mock_reset_all();
 	plant_power = 1.0;
 	plant_drift_v = 0.0;
+	plant_with_dc = true;
 	mock_install_mzm_descriptor(TEST_OFFSET_UV, TEST_GAIN_PPM, 5000000U);
 	zassert_equal(ctrl_thread_init(&mock_board_ops, &mock_storage_ops, true), -EBADMSG);
 
 	zassert_ok(run_cli("help", &cap));
 	zassert_not_null(strstr(cap.buf, "cal bias"));
+	zassert_not_null(strstr(cap.buf, "ctrl cfg"));
 	zassert_not_null(strstr(cap.buf, "eeprom init"));
 
 	zassert_ok(run_cli("status", &cap));
 	zassert_not_null(strstr(cap.buf, "state=IDLE"));
+	zassert_not_null(strstr(cap.buf, "frozen=0 recal=0"));
 	zassert_not_null(strstr(cap.buf, "drops="));
 	zassert_not_null(strstr(cap.buf, "crc_errs="));
+
+	/* ctrl cfg read & write validation */
+	zassert_ok(run_cli("ctrl cfg", &cap));
+	zassert_not_null(strstr(cap.buf, "pilot=159.200 mV wait=3 avg=1 mode=gain G=0.200"));
+	zassert_ok(run_cli("ctrl cfg wait 2", &cap));
+	zassert_ok(run_cli("ctrl cfg avg 2", &cap));
+	zassert_ok(run_cli("ctrl cfg gain 0.25", &cap));
+	zassert_ok(run_cli("ctrl cfg kp 0.1", &cap));
+	zassert_ok(run_cli("ctrl cfg ki 0.5", &cap));
+	zassert_ok(run_cli("ctrl cfg recal 1", &cap));
+	zassert_ok(run_cli("ctrl cfg rho_thresh 0.3", &cap));
+	zassert_ok(run_cli("ctrl cfg hold_ticks 10", &cap));
+	zassert_ok(run_cli("ctrl cfg pilot 80", &cap));
+	zassert_ok(run_cli("ctrl cfg", &cap));
+	zassert_not_null(strstr(cap.buf, "pilot=80.000 mV wait=2 avg=2 mode=pi"));
+	zassert_not_null(strstr(cap.buf, "kp=0.100 ki=0.500 recal=1 rho_thresh=0.300 hold_ticks=10"));
+
+	zassert_equal(run_cli("ctrl cfg wait 26", &cap), -ERANGE);
+	zassert_equal(run_cli("ctrl cfg avg 0", &cap), -ERANGE);
+	zassert_equal(run_cli("ctrl cfg avg 17", &cap), -ERANGE);
+	zassert_equal(run_cli("ctrl cfg recal 2", &cap), -ERANGE);
+	zassert_equal(run_cli("ctrl cfg hold_ticks 0", &cap), -ERANGE);
+	zassert_equal(run_cli("ctrl cfg pilot 250.1", &cap), -ERANGE);
+	zassert_equal(run_cli("ctrl cfg gain 2.0", &cap), -ERANGE);
+	zassert_equal(run_cli("ctrl cfg bogus 1", &cap), -EINVAL);
+
+	/* Restore defaults for cal/run */
+	zassert_ok(run_cli("ctrl cfg pilot 159.2", &cap));
+	zassert_ok(run_cli("ctrl cfg wait 3", &cap));
+	zassert_ok(run_cli("ctrl cfg avg 1", &cap));
+	zassert_ok(run_cli("ctrl cfg gain 0.20", &cap));
+	zassert_ok(run_cli("ctrl cfg recal 0", &cap));
 
 	zassert_ok(run_cli("target quad", &cap));
 	zassert_ok(run_cli("target min", &cap));
@@ -642,11 +805,7 @@ ZTEST(p4_suite, test_cli_service_commands)
 	start_feeder(SCAN_PILOT_V);
 	wait_ctrl_idle_or_fault(&st, 20000);
 	stop_feeder();
-	zassert_equal(st.state, CTRL_STATE_IDLE,
-		      "scan vpi state=%d fault=%d cln=%d step=%u upd=%u vpi_mv=%d",
-		      (int)st.state, st.fault, st.cleanup_error,
-		      (unsigned int)st.scan_step, (unsigned int)st.updates,
-		      (int)(st.scan_vpi_v * 1000.0f));
+	zassert_equal(st.state, CTRL_STATE_IDLE);
 
 	/* cal bias + save + load */
 	zassert_ok(run_cli("cal bias", &cap));
@@ -658,10 +817,25 @@ ZTEST(p4_suite, test_cli_service_commands)
 	zassert_ok(run_cli("save", &cap));
 	zassert_ok(run_cli("load", &cap));
 
-	/* start + running status + stop */
+	/* Capture a real decimated UART update from the closed-loop worker. */
+	tel_chars = 0;
+	memset(telemetry_line, 0, sizeof(telemetry_line));
+	zassert_ok(run_cli("telemetry on", &cap));
 	zassert_ok(run_cli("start", &cap));
+	printk_hook_fn_t original = __printk_get_hook();
+	__printk_hook_install(capture_telemetry_char);
 	start_feeder(SCAN_PILOT_V);
-	k_msleep(10);
+	k_msleep(100);
+	int tel_rc = run_cli("telemetry off", &cap);
+	__printk_hook_install(original);
+	zassert_ok(tel_rc);
+	zassert_true(!strncmp(telemetry_line, "TEL,", 4), "%s", telemetry_line);
+	zassert_true(tel_chars + 1 <= 135 && telemetry_line[tel_chars - 1] == '\n');
+	unsigned commas = 0;
+	for (size_t i = 0; i < tel_chars; ++i) {
+		commas += telemetry_line[i] == ',';
+	}
+	zassert_equal(commas, 16);
 	zassert_ok(run_cli("status", &cap));
 	zassert_not_null(strstr(cap.buf, "state=RUNNING"));
 	stop_feeder();
@@ -698,9 +872,142 @@ ZTEST(p4_suite, test_cli_service_commands)
 	zassert_not_null(strstr(cap.buf, "reinit: err=-19"));
 }
 
+/* Exercise the parser, DRDY path and real control worker together. Use a
+ * deterministic cycle increment large enough to wrap both CYCCNT and a u32 sum. */
+static K_THREAD_STACK_DEFINE(samples_stack, 1536);
+static struct k_thread samples_thread;
+static atomic_t samples_active;
+static uint32_t delivery_count, previous_write, last_write;
+
+struct dump_log {
+	unsigned segments, rows, samples;
+};
+
+static void check_dump(const char *text, void *ctx)
+{
+	struct dump_log *log = ctx;
+	if (!strncmp(text, "DUMP_SEG,", 9)) {
+		unsigned idx, n;
+		zassert_equal(sscanf(text + 9, "%u,%u", &idx, &n), 2);
+		zassert_equal(idx, log->segments++);
+		zassert_equal(log->samples, idx * 1280);
+		zassert_equal(n, idx == 12 ? 1024 : 1280);
+	} else if (!strncmp(text, "DUMP_DATA", 9)) {
+		unsigned fields = 0;
+		for (const char *c = text + 9; *c; ++c) {
+			fields += *c == ',';
+		}
+		zassert_equal(fields, 16);
+		log->samples += fields;
+		log->rows++;
+	} else {
+		zassert_equal(strcmp(text, "adc: ok\n"), 0);
+	}
+}
+
+static void produce_samples(void *a, void *b, void *c)
+{
+	uint32_t now = UINT32_MAX - 100;
+	while (atomic_get(&samples_active)) {
+		for (unsigned i = 0; i < DSP_GOERTZEL_BLOCK_SIZE; ++i) {
+			uint16_t before = mock_state.dc_code[0];
+			int32_t ch0 = (i & 1) ? 8388607 : -8388608;
+			if (rt_pipeline_ingest(ch0, 42, 0, now)) {
+				break;
+			}
+			if (mock_state.dc_code[0] != before) {
+				previous_write = last_write;
+				last_write = delivery_count;
+			}
+			++delivery_count;
+			now += 50000;
+		}
+		k_sleep(K_MSEC(1));
+	}
+}
+
+ZTEST(p4_suite, test_experiment_cli)
+{
+	struct cli_cap cap;
+	ctrl_thread_status_t st;
+	mock_reset_all();
+	mock_install_mzm_descriptor(TEST_OFFSET_UV, TEST_GAIN_PPM, 5000000U);
+	zassert_equal(ctrl_thread_init(&mock_board_ops, &mock_storage_ops, true), -EBADMSG);
+	zassert_equal(run_cli("hw info", &cap), -EBADMSG);
+	zassert_not_null(strstr(cap.buf, "CLOCK=0x0322"));
+	zassert_not_null(strstr(cap.buf, "cal_crc=0xFFFFFFFF"));
+	zassert_equal(run_cli("adc dump 16385", &cap), -ERANGE);
+	zassert_equal(run_cli("adc stat 999", &cap), -ERANGE);
+	zassert_equal(run_cli("meas -5001 0 0 1", &cap), -ERANGE);
+	zassert_equal(run_cli("meas 0 250.1 0 1", &cap), -ERANGE);
+	zassert_equal(run_cli("meas 0 0 251 1", &cap), -ERANGE);
+	zassert_equal(run_cli("step 0 1 0 201", &cap), -ERANGE);
+	zassert_equal(run_cli("telemetry yes", &cap), -EINVAL);
+	zassert_ok(run_cli("telemetry on", &cap));
+	zassert_ok(run_cli("telemetry off", &cap));
+
+	atomic_set(&samples_active, 1);
+	k_thread_create(&samples_thread, samples_stack, K_THREAD_STACK_SIZEOF(samples_stack),
+			produce_samples, NULL, NULL, NULL, 6, 0, K_NO_WAIT);
+	zassert_ok(run_cli("adc stat 100000", &cap), "%s", cap.buf);
+	zassert_not_null(strstr(cap.buf, "total_cyc=5000000000,"));
+	zassert_not_null(strstr(cap.buf, "dt_min_cyc=50000,dt_max_cyc=50000"));
+	zassert_ok(run_cli("adc dump 3", &cap));
+	zassert_not_null(strstr(cap.buf, "DUMP_SEG,0,3,"));
+	zassert_true(strstr(cap.buf, "DUMP_DATA,-8388608,8388607,-8388608") ||
+		     strstr(cap.buf, "DUMP_DATA,8388607,-8388608,8388607"), "%s", cap.buf);
+	struct dump_log dump = {0};
+	zassert_ok(cli_service_exec_line("adc dump 16384", check_dump, &dump));
+	zassert_equal(dump.samples, 16384);
+	zassert_equal(dump.segments, 13);
+	zassert_equal(dump.rows, 1024);
+	zassert_ok(run_cli("meas 100 159.2 2 2", &cap), "%s", cap.buf);
+	zassert_not_null(strstr(cap.buf, "MEAS,3,"));
+	zassert_not_null(strstr(cap.buf, "MEAS,4,"));
+	zassert_not_null(strstr(cap.buf, ",159.200,"));
+	zassert_ok(ctrl_thread_get_status(&st));
+	zassert_equal(st.state, CTRL_STATE_EXP_HOLD);
+	zassert_within(st.bias_v, .100f, 1e-6f);
+	zassert_equal(run_cli("adc dump 1", &cap), -EBUSY);
+	uint32_t held = delivery_count;
+	while (delivery_count - held < (DSP_CONTROL_DECIMATION + 2) * DSP_GOERTZEL_BLOCK_SIZE) {
+		k_msleep(20);
+		zassert_ok(rt_pipeline_fault());
+	}
+	zassert_ok(run_cli("step -200 300 0 2", &cap), "%s", cap.buf);
+	zassert_equal(last_write - previous_write, 15 * DSP_GOERTZEL_BLOCK_SIZE);
+	zassert_not_null(strstr(cap.buf, "STEP,"));
+	zassert_not_null(strstr(cap.buf, ",300.000,"));
+	zassert_ok(ctrl_thread_get_status(&st));
+	zassert_within(st.bias_v, .300f, 1e-6f);
+	zassert_equal(rt_pipeline_drop_count(), 0);
+	zassert_ok(run_cli("stop", &cap));
+	zassert_ok(ctrl_thread_get_status(&st));
+	zassert_equal(st.state, CTRL_STATE_IDLE);
+	zassert_equal(st.bias_v, 0);
+	atomic_clear(&samples_active);
+	zassert_ok(k_thread_join(&samples_thread, K_SECONDS(1)));
+}
+
+ZTEST(p4_suite, test_experiment_row_wire_limit)
+{
+	struct cli_cap cap = {0};
+	rt_pipeline_block_t b = {
+		.seq = UINT32_MAX, .t_ms = UINT32_MAX, .pilot_amplitude_v = .25f,
+		.iq = {-2.4f, -2.4f, -2.4f, -2.4f}, .harmonics.dc_power = -1.2f,
+		.min_v = {-1.2f, -1.2f}, .max_v = {-1.2f, -1.2f},
+	};
+	zassert_ok(cli_measure_row(&b, true, -10.f, UINT16_MAX, cli_capture_cb, &cap));
+	zassert_true(cap.len + 1 <= 135);
+	zassert_equal(cap.buf[cap.len - 1], '\n');
+}
+
 static void p4_after(void *fixture)
 {
 	ARG_UNUSED(fixture);
+	if (atomic_clear(&samples_active)) {
+		k_thread_join(&samples_thread, K_SECONDS(1));
+	}
 	stop_feeder();
 	(void)ctrl_thread_stop();
 	(void)rt_pipeline_stop();

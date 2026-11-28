@@ -17,6 +17,9 @@ typedef struct {
 	harmonic_data_t harmonics;
 	uint32_t seq; /* Starts at zero on each start. */
 	uint32_t timestamp_cycles; /* Arrival of the final sample in the block. */
+	uint32_t t_ms;
+	float iq[4]; /* H1 I,Q then H2 I,Q, peak volts. */
+	float min_v[2], max_v[2];
 	float pilot_amplitude_v;
 } rt_pipeline_block_t;
 
@@ -35,7 +38,20 @@ int rt_pipeline_set_dc_code(uint8_t dc, uint16_t code);
 int rt_pipeline_set_pilot_amplitude(float amp_v);
 int rt_pipeline_get_block(rt_pipeline_block_t *block, k_timeout_t timeout);
 
+/* Schedule VA/pilot at the next block end, optionally a second VA 15 blocks later.
+ * first_seq identifies the first complete block after the final write. */
+int rt_pipeline_schedule(uint16_t code, float amplitude, bool step, uint16_t final_code,
+                         uint32_t *first_seq);
+int rt_pipeline_read_regs(uint16_t regs[4]);
+typedef struct {
+	uint64_t total;
+	uint32_t min, max, first;
+} rt_adc_stats_t;
+int rt_pipeline_capture(bool dump, uint32_t count, bool manual, rt_adc_stats_t *stats);
+int32_t rt_pipeline_dump_sample(unsigned index);
+
 int rt_pipeline_fault(void);
+bool rt_pipeline_dc_pending(void);
 uint32_t rt_pipeline_drop_count(void);
 uint32_t rt_pipeline_crc_error_count(void);
 

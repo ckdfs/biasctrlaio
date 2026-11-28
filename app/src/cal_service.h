@@ -22,3 +22,6 @@ int cal_service_load(const analog_board_ops_t *board, const cal_storage_ops_t *s
 		     struct bias_eeprom_descriptor_v1 *desc, ctrl_calibration_t *cal);
 int cal_service_save(const analog_board_ops_t *board, const cal_storage_ops_t *storage,
 		     struct bias_eeprom_descriptor_v1 *desc, const ctrl_calibration_t *cal);
+int cal_service_inspect(const analog_board_ops_t *board, const cal_storage_ops_t *storage,
+			struct bias_eeprom_descriptor_v1 *desc, ctrl_calibration_t *cal,
+			uint32_t *record_crc);

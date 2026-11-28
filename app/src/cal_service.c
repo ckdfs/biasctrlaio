@@ -12,20 +12,21 @@ static const struct i2c_dt_spec u21 = I2C_DT_SPEC_GET(DT_NODELABEL(bias_eeprom))
 #endif
 
 #define RECORD_OFFSET 160u
-#define RECORD_MAGIC 0x314d5a4du /* "MZM1" */
+#define RECORD_MAGIC 0x324d5a4du /* "MZM2" */
 #define WIRE_CRC(obj) crc32_ieee((const uint8_t *)&(obj), offsetof(__typeof__(obj), crc32))
 
 /* Little-endian, binary32. Use a fixed-width flag instead of persisting
  * implementation-defined bool layout. Bind the record to its descriptor. */
-struct cal_mzm_record_v1 {
+struct cal_mzm_record_v2 {
 	uint32_t magic, descriptor_crc;
 	dsp_affine_fit_t fit;
-	float null_v, vpi_v, cal_pilot_v, obs_dc_seed;
-	uint32_t has_obs_dc_seed, crc32;
+	float null_v, vpi_v, cal_pilot_v;
+	float h1_ref_phase, h2_ref_phase;
+	uint32_t has_ref_phases, reserved, crc32;
 };
-BUILD_ASSERT(sizeof(struct cal_mzm_record_v1) == 56);
+BUILD_ASSERT(sizeof(struct cal_mzm_record_v2) == 64);
 BUILD_ASSERT(RECORD_OFFSET >= BIAS_EEPROM_V1_SIZE && RECORD_OFFSET % BIAS_EEPROM_PAGE_BYTES == 0);
-BUILD_ASSERT(RECORD_OFFSET + sizeof(struct cal_mzm_record_v1) <= BIAS_EEPROM_CAPACITY_BYTES);
+BUILD_ASSERT(RECORD_OFFSET + sizeof(struct cal_mzm_record_v2) <= BIAS_EEPROM_CAPACITY_BYTES);
 
 int cal_service_voltage_bounds(const struct bias_eeprom_descriptor_v1 *d, float *lo, float *hi)
 {
@@ -55,7 +56,7 @@ int cal_service_voltage_to_dac_code(const struct bias_eeprom_descriptor_v1 *d,
 	return 0;
 }
 
-static int transfer(const cal_storage_ops_t *storage, struct cal_mzm_record_v1 *r, bool write)
+static int transfer(const cal_storage_ops_t *storage, struct cal_mzm_record_v2 *r, bool write)
 {
 	int rc = 0;
 	if (storage && !(write ? storage->write_page != NULL : storage->read != NULL)) {
@@ -102,7 +103,7 @@ static int transfer(const cal_storage_ops_t *storage, struct cal_mzm_record_v1 *
 	return rc;
 }
 
-static bool valid_record(const struct cal_mzm_record_v1 *r)
+static bool valid_record(const struct cal_mzm_record_v2 *r)
 {
 	for (size_t i = 0; i < 2; i++) {
 		if (!isfinite(r->fit.o[i]) || !isfinite(r->fit.m[i][0]) ||
@@ -113,7 +114,8 @@ static bool valid_record(const struct cal_mzm_record_v1 *r)
 	double uv = (double)r->vpi_v * 1e6;
 	return isfinite(r->null_v) && uv >= 0.5 && uv < UINT32_MAX + 0.5 &&
 	       isfinite(r->cal_pilot_v) && r->cal_pilot_v > 0 &&
-	       isfinite(r->obs_dc_seed) && r->has_obs_dc_seed <= 1;
+	       isfinite(r->h1_ref_phase) && isfinite(r->h2_ref_phase) &&
+	       r->has_ref_phases <= 1 && r->reserved == 0;
 }
 
 int cal_service_save(const analog_board_ops_t *board, const cal_storage_ops_t *storage,
@@ -123,10 +125,12 @@ int cal_service_save(const analog_board_ops_t *board, const cal_storage_ops_t *s
 	    !desc->channels[0].subtractor_gain_ppm || (storage && !storage->write_page)) {
 		return -EINVAL;
 	}
-	struct cal_mzm_record_v1 r = {
+	struct cal_mzm_record_v2 r = {
 		.magic = RECORD_MAGIC, .fit = cal->fit, .null_v = cal->null_v,
 		.vpi_v = cal->vpi_v, .cal_pilot_v = cal->cal_pilot_v,
-		.has_obs_dc_seed = cal->has_obs_dc_seed, .obs_dc_seed = cal->obs_dc_seed,
+		.h1_ref_phase = cal->h1_ref_phase, .h2_ref_phase = cal->h2_ref_phase,
+		.has_ref_phases = cal->has_ref_phases ? 1u : 0u,
+		.reserved = 0u,
 	};
 	if (!valid_record(&r)) {
 		return -EINVAL;
@@ -165,8 +169,8 @@ int cal_service_load_descriptor(const analog_board_ops_t *board, struct bias_eep
 	return 0;
 }
 
-int cal_service_load(const analog_board_ops_t *board, const cal_storage_ops_t *storage,
-		     struct bias_eeprom_descriptor_v1 *desc, ctrl_calibration_t *cal)
+int cal_service_inspect(const analog_board_ops_t *board, const cal_storage_ops_t *storage,
+		     struct bias_eeprom_descriptor_v1 *desc, ctrl_calibration_t *cal, uint32_t *record_crc)
 {
 	if (!desc || !cal) {
 		return -EINVAL;
@@ -176,10 +180,16 @@ int cal_service_load(const analog_board_ops_t *board, const cal_storage_ops_t *s
 	if (rc) {
 		return rc;
 	}
-	struct cal_mzm_record_v1 r;
+	struct cal_mzm_record_v2 r;
+	if (record_crc) {
+		*desc = d; /* Preserve validated descriptor even if the record is corrupt. */
+	}
 	rc = transfer(storage, &r, false);
 	if (rc) {
 		return rc;
+	}
+	if (record_crc) {
+		*record_crc = r.crc32;
 	}
 	if (r.magic != RECORD_MAGIC || r.crc32 != WIRE_CRC(r) || r.descriptor_crc != d.crc32 ||
 	    !valid_record(&r) || d.channels[0].vpi_uv != (uint32_t)((double)r.vpi_v * 1e6 + 0.5)) {
@@ -188,7 +198,14 @@ int cal_service_load(const analog_board_ops_t *board, const cal_storage_ops_t *s
 	*desc = d;
 	*cal = (ctrl_calibration_t){
 		.fit = r.fit, .null_v = r.null_v, .vpi_v = r.vpi_v, .cal_pilot_v = r.cal_pilot_v,
-		.has_obs_dc_seed = r.has_obs_dc_seed, .obs_dc_seed = r.obs_dc_seed,
+		.h1_ref_phase = r.h1_ref_phase, .h2_ref_phase = r.h2_ref_phase,
+		.has_ref_phases = r.has_ref_phases != 0u,
 	};
 	return 0;
+}
+
+int cal_service_load(const analog_board_ops_t *board, const cal_storage_ops_t *storage,
+		     struct bias_eeprom_descriptor_v1 *desc, ctrl_calibration_t *cal)
+{
+	return cal_service_inspect(board, storage, desc, cal, NULL);
 }

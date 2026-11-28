@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: Apache-2.0 */
 #include "cli_service.h"
 #include "ctrl_thread.h"
-#include "rt_pipeline.h"
+#include "experiment_output.h"
 
 #include <analog_board_mzm.h>
 #include <bias/analog_board.h>
@@ -14,6 +14,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <zephyr/device.h>
+#include <zephyr/version.h>
 #include <zephyr/drivers/uart.h>
 #include <zephyr/kernel.h>
 #include <zephyr/sys/atomic.h>
@@ -25,10 +26,15 @@
 #define CLI_LINE_SIZE 96U
 #define CLI_MAX_ARGS 6
 
+static K_MUTEX_DEFINE(console_tx);
+static atomic_t quiet_console;
+
 static void default_write(const char *text, void *ctx)
 {
 	ARG_UNUSED(ctx);
+	k_mutex_lock(&console_tx, K_FOREVER);
 	printk("%s", text);
+	k_mutex_unlock(&console_tx);
 }
 
 static void cli_printf(cli_write_fn_t out, void *ctx, const char *fmt, ...)
@@ -87,7 +93,7 @@ static void fmt_fixed3(char *buf, size_t sz, float val)
 		       (unsigned int)(mag / 1000U), (unsigned int)(mag % 1000U));
 }
 
-static int parse_decimal_deg(const char *s, float *out)
+static int parse_decimal(const char *s, float *out)
 {
 	if (s == NULL || *s == '\0' || out == NULL) {
 		return -EINVAL;
@@ -147,6 +153,26 @@ static int parse_decimal_deg(const char *s, float *out)
 	return 0;
 }
 
+static int parse_count(const char *str, unsigned *count)
+{
+	if (str == NULL || *str == '\0' || count == NULL) {
+		return -EINVAL;
+	}
+	unsigned n = 0;
+
+	for (; *str; ++str) {
+		if (*str < '0' || *str > '9') {
+			return -EINVAL;
+		}
+		n = n * 10 + (*str - '0');
+		if (n > 1000000) {
+			return -ERANGE;
+		}
+	}
+	*count = n;
+	return 0;
+}
+
 static const char *state_name(ctrl_state_t st)
 {
 	switch (st) {
@@ -158,6 +184,8 @@ static const char *state_name(ctrl_state_t st)
 		return "CAL";
 	case CTRL_STATE_RUNNING:
 		return "RUNNING";
+	case CTRL_STATE_EXP_HOLD:
+		return "EXP_HOLD";
 	case CTRL_STATE_FAULT:
 		return "FAULT";
 	default:
@@ -191,11 +219,16 @@ static void cmd_help(cli_write_fn_t out, void *ctx)
 		   "  scan vpi\n"
 		   "  start\n"
 		   "  stop\n"
-		   "  target quad|min|max|custom <deg>\n"
+		   "  target quad|min|max|custom <deg>\n");
+	cli_printf(out, ctx,
+		   "  ctrl cfg [<param> <val>]\n"
 		   "  save\n"
 		   "  load\n"
 		   "  reinit\n"
 		   "  eeprom init\n");
+	cli_printf(out, ctx, "  hw info\n  adc stat|dump <n>\n"
+		   "  meas <bias_mv> <pilot_mv> <wait_blocks> <n_blocks>\n"
+		   "  step <v0_mv> <v1_mv> <pilot_mv> <n_blocks>\n  telemetry on|off\n");
 }
 
 static int cmd_status(cli_write_fn_t out, void *ctx)
@@ -216,9 +249,10 @@ static int cmd_status(cli_write_fn_t out, void *ctx)
 	fmt_fixed3(dcm, sizeof(dcm), st.harmonics.dc_power * 1000.0f);
 
 	cli_printf(out, ctx,
-		   "state=%s init=%d target=%s(%s deg) cal=%d locked=%d hold_assist=%d\n",
+		   "state=%s init=%d target=%s(%s deg) cal=%d locked=%d hold_assist=%d frozen=%d recal=%u\n",
 		   state_name(st.state), st_rc == 0 ? 1 : 0, target_name(st.target), deg_buf,
-		   st.calibrated ? 1 : 0, st.locked ? 1 : 0, st.hold_assist_active ? 1 : 0);
+		   st.calibrated ? 1 : 0, st.locked ? 1 : 0, st.hold_assist_active ? 1 : 0,
+		   st.frozen ? 1 : 0, (unsigned int)st.recal_count);
 	cli_printf(out, ctx,
 		   "bias=%d mV scan_vpi=%d mV vpi=%d mV null=%d mV updates=%u pass=%u step=%u\n",
 		   (int)float_to_mv(st.bias_v), (int)float_to_mv(st.scan_vpi_v),
@@ -234,6 +268,121 @@ static int cmd_status(cli_write_fn_t out, void *ctx)
 	return 0;
 }
 
+static int cmd_ctrl_cfg(int argc, char **argv, cli_write_fn_t out, void *ctx)
+{
+	ctrl_thread_cfg_t cfg;
+	int rc = ctrl_thread_get_cfg(&cfg);
+
+	if (rc && rc != -ENODEV) {
+		cli_printf(out, ctx, "ctrl cfg: err=%d\n", rc);
+		return rc;
+	}
+	if (argc == 2) {
+		char pilot[16], gain[16], kp[16], ki[16], rho[16];
+
+		fmt_fixed3(pilot, sizeof(pilot), cfg.pilot_v * 1000.0f);
+		fmt_fixed3(gain, sizeof(gain), cfg.gain);
+		fmt_fixed3(kp, sizeof(kp), cfg.kp);
+		fmt_fixed3(ki, sizeof(ki), cfg.ki);
+		fmt_fixed3(rho, sizeof(rho), cfg.rho_thresh);
+		cli_printf(out, ctx,
+			   "pilot=%s mV wait=%u avg=%u mode=%s G=%s kp=%s ki=%s recal=%u rho_thresh=%s hold_ticks=%u\n",
+			   pilot, (unsigned int)cfg.wait_blocks, (unsigned int)cfg.avg_blocks,
+			   cfg.use_gain ? "gain" : "pi", gain, kp, ki,
+			   cfg.recal_auto ? 1U : 0U, rho, (unsigned int)cfg.hold_ticks);
+		return 0;
+	}
+	if (argc != 4) {
+		cli_printf(out, ctx,
+			   "Usage: ctrl cfg [<pilot|wait|avg|gain|kp|ki|recal|rho_thresh|hold_ticks> <val>]\n");
+		return -EINVAL;
+	}
+
+	const char *key = argv[2];
+	const char *val_str = argv[3];
+	float fval = 0.0f;
+	unsigned uval = 0U;
+
+	if (strcmp(key, "pilot") == 0) {
+		rc = parse_decimal(val_str, &fval);
+		if (!rc) {
+			cfg.pilot_v = fval / 1000.0f;
+		}
+	} else if (strcmp(key, "wait") == 0) {
+		rc = parse_count(val_str, &uval);
+		if (!rc) {
+			if (uval > 25U) {
+				rc = -ERANGE;
+			} else {
+				cfg.wait_blocks = (uint8_t)uval;
+			}
+		}
+	} else if (strcmp(key, "avg") == 0) {
+		rc = parse_count(val_str, &uval);
+		if (!rc) {
+			if (uval < 1U || uval > 16U) {
+				rc = -ERANGE;
+			} else {
+				cfg.avg_blocks = (uint8_t)uval;
+			}
+		}
+	} else if (strcmp(key, "gain") == 0) {
+		rc = parse_decimal(val_str, &fval);
+		if (!rc) {
+			cfg.use_gain = true;
+			cfg.gain = fval;
+			cfg.kp = 0.0f;
+		}
+	} else if (strcmp(key, "kp") == 0) {
+		rc = parse_decimal(val_str, &fval);
+		if (!rc) {
+			if (cfg.use_gain && cfg.ki <= 0.0f) {
+				cfg.ki = 0.85f;
+			}
+			cfg.use_gain = false;
+			cfg.kp = fval;
+		}
+	} else if (strcmp(key, "ki") == 0) {
+		rc = parse_decimal(val_str, &fval);
+		if (!rc) {
+			cfg.use_gain = false;
+			cfg.ki = fval;
+		}
+	} else if (strcmp(key, "recal") == 0) {
+		rc = parse_count(val_str, &uval);
+		if (!rc) {
+			if (uval > 1U) {
+				rc = -ERANGE;
+			} else {
+				cfg.recal_auto = (uval != 0U);
+			}
+		}
+	} else if (strcmp(key, "rho_thresh") == 0) {
+		rc = parse_decimal(val_str, &fval);
+		if (!rc) {
+			cfg.rho_thresh = fval;
+		}
+	} else if (strcmp(key, "hold_ticks") == 0) {
+		rc = parse_count(val_str, &uval);
+		if (!rc) {
+			if (uval < 1U || uval > 1000U) {
+				rc = -ERANGE;
+			} else {
+				cfg.hold_ticks = (uint16_t)uval;
+			}
+		}
+	} else {
+		cli_printf(out, ctx, "ctrl cfg: unknown param '%s'\n", key);
+		return -EINVAL;
+	}
+
+	if (!rc) {
+		rc = ctrl_thread_set_cfg(&cfg);
+	}
+	cli_printf(out, ctx, rc == 0 ? "ctrl cfg: ok\n" : "ctrl cfg: err=%d\n", rc);
+	return rc;
+}
+
 static int cmd_target(int argc, char **argv, cli_write_fn_t out, void *ctx)
 {
 	int rc;
@@ -247,7 +396,7 @@ static int cmd_target(int argc, char **argv, cli_write_fn_t out, void *ctx)
 	} else if (argc == 3 && strcmp(argv[1], "custom") == 0) {
 		float deg = 0.0f;
 
-		rc = parse_decimal_deg(argv[2], &deg);
+		rc = parse_decimal(argv[2], &deg);
 		if (rc < 0) {
 			cli_printf(out, ctx, "target custom: invalid degree '%s' (err=%d)\n",
 				   argv[2], rc);
@@ -273,7 +422,7 @@ static int cmd_eeprom_init(cli_write_fn_t out, void *ctx)
 
 	if (ctrl_thread_get_status(&st) == 0 &&
 	    (st.state == CTRL_STATE_SCAN || st.state == CTRL_STATE_CAL ||
-	     st.state == CTRL_STATE_RUNNING)) {
+	     st.state == CTRL_STATE_RUNNING || st.state == CTRL_STATE_EXP_HOLD)) {
 		cli_printf(out, ctx, "eeprom init: busy (err=%d)\n", -EBUSY);
 		return -EBUSY;
 	}
@@ -300,6 +449,138 @@ static int cmd_eeprom_init(cli_write_fn_t out, void *ctx)
 		cli_printf(out, ctx, "eeprom init: err=%d\n", rc);
 	}
 	return rc;
+}
+
+/* The wire limit includes the CR inserted by the UART console before LF. */
+static int send_row(char *row, int length, cli_write_fn_t out, void *ctx)
+{
+	if (length < 0 || length + 1 > 135) {
+		return -EOVERFLOW;
+	}
+	(out ? out : default_write)(row, ctx);
+	return 0;
+}
+
+int cli_measure_row(const rt_pipeline_block_t *b, bool step, float bias, uint16_t code,
+		    cli_write_fn_t out, void *ctx)
+{
+	char row[135], values[7][16];
+	const float volts[] = {bias, b->pilot_amplitude_v, b->harmonics.dc_power,
+			       b->min_v[0], b->max_v[0], b->min_v[1], b->max_v[1]};
+	for (unsigned i = 0; i < 3; ++i) {
+		fmt_fixed3(values[i], sizeof(values[i]), volts[i] * 1000.f);
+	}
+	/* Extrema use 0.1 mV. This leaves room for both 32-bit clocks and
+	 * full-scale signed I/Q even on the longest sample row. */
+	for (unsigned i = 3; i < ARRAY_SIZE(volts); ++i) {
+		int tenths = float_to_mv(volts[i] * 10.f);
+		unsigned magnitude = tenths < 0 ? -tenths : tenths;
+		snprintf(values[i], sizeof(values[i]), "%s%u.%u", tenths < 0 ? "-" : "",
+			 magnitude / 10, magnitude % 10);
+	}
+	int n = snprintf(row, sizeof(row),
+			 "%s,%u,%u,%s,%u,%s,%d,%d,%d,%d,%s,%s,%s,%s,%s,%u,%u\n",
+			 step ? "STEP" : "MEAS", b->seq, b->t_ms, values[0], code, values[1],
+			 float_to_mv(b->iq[0] * 1000.f), float_to_mv(b->iq[1] * 1000.f),
+			 float_to_mv(b->iq[2] * 1000.f), float_to_mv(b->iq[3] * 1000.f),
+			 values[2], values[3], values[4], values[5], values[6],
+			 rt_pipeline_drop_count(), rt_pipeline_crc_error_count());
+	return send_row(row, n, out, ctx);
+}
+
+int cli_tel_row(const ctrl_thread_status_t *st, const rt_pipeline_block_t *b,
+		float phase, float error, float radius, const float iq[4])
+{
+	char row[135], bias[16], phi[16], err[16], r[16], dc[16];
+	fmt_fixed3(bias, sizeof(bias), st->bias_v * 1000.f);
+	fmt_fixed3(phi, sizeof(phi), phase);
+	fmt_fixed3(err, sizeof(err), error);
+	fmt_fixed3(r, sizeof(r), radius);
+	fmt_fixed3(dc, sizeof(dc), st->harmonics.dc_power * 1000.f);
+	int n = snprintf(row, sizeof(row), "TEL,%u,%u,%s,%s,%s,%s,%d,%d,%d,%d,%s,%d,%d,%u,%u,%u\n",
+			 st->updates, b->t_ms, bias, phi, err, r,
+			 float_to_mv(iq[0] * 1000.f), float_to_mv(iq[1] * 1000.f),
+			 float_to_mv(iq[2] * 1000.f), float_to_mv(iq[3] * 1000.f),
+			 dc, st->locked ? 1 : 0, st->frozen ? 1 : 0,
+			 (unsigned int)st->recal_count,
+			 rt_pipeline_drop_count(), rt_pipeline_crc_error_count());
+	return send_row(row, n, NULL, NULL);
+}
+
+void cli_hw_result(const uint16_t regs[4], uint32_t desc_crc, uint32_t record_crc,
+		   int cal_rc, cli_write_fn_t out, void *ctx)
+{
+	cli_printf(out, ctx, "SYSCLK=%u ADS131M02 ID=0x%04X STAT=0x%04X MODE=0x%04X CLOCK=0x%04X\n",
+		   sys_clock_hw_cycles_per_sec(), regs[0], regs[1], regs[2], regs[3]);
+	cli_printf(out, ctx, "U21 desc_crc=0x%08X cal_status=%d cal_crc=0x%08X\n",
+		   desc_crc, cal_rc, record_crc);
+	cli_printf(out, ctx, "fw=P7 rev=%s board=%s zephyr=%s build=%s\n",
+		   BIAS_FW_REV, CONFIG_BOARD, KERNEL_VERSION_STRING,
+		   STRINGIFY(BUILD_VERSION));
+}
+
+void cli_adc_result(bool dump, unsigned segment, unsigned count, const rt_adc_stats_t *stats,
+		    cli_write_fn_t out, void *ctx)
+{
+	if (!dump) {
+		uint64_t mhz = ((uint64_t)sys_clock_hw_cycles_per_sec() * count * 1000 +
+				stats->total / 2) / stats->total;
+		cli_printf(out, ctx, "ADC_STAT,n=%u,total_cyc=%llu,fs_hz=%u.%03u,dt_min_cyc=%u,dt_max_cyc=%u,drops=%u,crc=%u\n",
+			   count, (unsigned long long)stats->total, (unsigned)(mhz / 1000),
+			   (unsigned)(mhz % 1000), stats->min, stats->max,
+			   rt_pipeline_drop_count(), rt_pipeline_crc_error_count());
+		return;
+	}
+	cli_printf(out, ctx, "DUMP_SEG,%u,%u,%u\n", segment, count, stats->first);
+	for (unsigned i = 0; i < count;) {
+		char row[160] = "DUMP_DATA";
+		size_t used = strlen(row);
+		for (unsigned j = 0; j < 16 && i < count; ++j, ++i) {
+			used += snprintf(row + used, sizeof(row) - used, ",%d",
+					 rt_pipeline_dump_sample(i));
+		}
+		strcpy(row + used, "\n");
+		(out ? out : default_write)(row, ctx);
+	}
+}
+
+static int experiment(int argc, char **argv, cli_write_fn_t out, void *ctx)
+{
+	unsigned count, wait = 0;
+	if (!strcmp(argv[0], "hw") && argc == 2 && !strcmp(argv[1], "info")) {
+		return ctrl_thread_hw_info(out, ctx);
+	}
+	if (!strcmp(argv[0], "adc") && argc == 3 &&
+	    (!strcmp(argv[1], "dump") || !strcmp(argv[1], "stat"))) {
+		int rc = parse_count(argv[2], &count);
+		return rc ? rc : ctrl_thread_adc(!strcmp(argv[1], "dump"), count, out, ctx);
+	}
+	if (!strcmp(argv[0], "telemetry") && argc == 2 &&
+	    (!strcmp(argv[1], "on") || !strcmp(argv[1], "off"))) {
+		bool enable = !strcmp(argv[1], "on");
+		ctrl_thread_telemetry(enable);
+		atomic_set(&quiet_console, enable);
+		return 0;
+	}
+	bool step = !strcmp(argv[0], "step");
+	if (argc != 5 || (!step && strcmp(argv[0], "meas"))) {
+		return -EINVAL;
+	}
+	float initial, final, pilot;
+	int rc = parse_decimal(argv[1], &initial);
+	if (rc) {
+		return rc;
+	}
+	final = initial;
+	rc = step ? parse_decimal(argv[2], &final) : parse_count(argv[3], &wait);
+	if (!rc) {
+		rc = parse_decimal(argv[step ? 3 : 2], &pilot);
+	}
+	if (!rc) {
+		rc = parse_count(argv[4], &count);
+	}
+	return rc ? rc : ctrl_thread_measure(step, initial / 1000.f, final / 1000.f,
+					     pilot / 1000.f, wait, count, out, ctx);
 }
 
 int cli_service_exec_line(const char *line, cli_write_fn_t out, void *ctx)
@@ -336,6 +617,12 @@ int cli_service_exec_line(const char *line, cli_write_fn_t out, void *ctx)
 		return 0;
 	}
 
+	if (!strcmp(argv[0], "hw") || !strcmp(argv[0], "adc") || !strcmp(argv[0], "meas") ||
+	    !strcmp(argv[0], "step") || !strcmp(argv[0], "telemetry")) {
+		int rc = experiment(argc, argv, out, ctx);
+		cli_printf(out, ctx, rc ? "%s: err=%d\n" : "%s: ok\n", argv[0], rc);
+		return rc;
+	}
 	if (argc == 1 && strcmp(argv[0], "help") == 0) {
 		cmd_help(out, ctx);
 		return 0;
@@ -369,6 +656,9 @@ int cli_service_exec_line(const char *line, cli_write_fn_t out, void *ctx)
 	}
 	if (strcmp(argv[0], "target") == 0) {
 		return cmd_target(argc, argv, out, ctx);
+	}
+	if (argc >= 2 && strcmp(argv[0], "ctrl") == 0 && strcmp(argv[1], "cfg") == 0) {
+		return cmd_ctrl_cfg(argc, argv, out, ctx);
 	}
 	if (argc == 1 && strcmp(argv[0], "save") == 0) {
 		int rc = ctrl_thread_save_cal();
@@ -468,7 +758,7 @@ static void cli_thread_entry(void *a, void *b, void *c)
 	bool line_overflow = false;
 	bool prev_cr = false;
 
-	printk("Phase 4 CLI ready. Type 'help'.\n> ");
+	printk("Phase 7 CLI ready. Type 'help'.\n> ");
 
 	for (;;) {
 		k_sem_take(&rx_sem, K_FOREVER);
@@ -489,7 +779,9 @@ static void cli_thread_entry(void *a, void *b, void *c)
 			prev_cr = (byte == '\r');
 
 			if (byte == '\r' || byte == '\n') {
-				printk("\n");
+				if (!atomic_get(&quiet_console)) {
+					printk("\n");
+				}
 				if (line_overflow) {
 					printk("Line too long (err=%d)\n", -E2BIG);
 				} else {
@@ -500,7 +792,9 @@ static void cli_thread_entry(void *a, void *b, void *c)
 				}
 				line_len = 0;
 				line_overflow = false;
-				printk("> ");
+				if (!atomic_get(&quiet_console)) {
+					printk("> ");
+				}
 			} else if (byte == '\b' || byte == 0x7fU) {
 				if (line_overflow) {
 					line_overflow = false;
@@ -508,12 +802,16 @@ static void cli_thread_entry(void *a, void *b, void *c)
 					printk("\n> ");
 				} else if (line_len > 0U) {
 					line_len--;
-					printk("\b \b");
+					if (!atomic_get(&quiet_console)) {
+						printk("\b \b");
+					}
 				}
 			} else if (byte >= 0x20U && byte < 0x7fU) {
 				if (line_len + 1U < CLI_LINE_SIZE) {
 					line_buf[line_len++] = (char)byte;
-					printk("%c", byte);
+					if (!atomic_get(&quiet_console)) {
+						printk("%c", byte);
+					}
 				} else {
 					line_overflow = true;
 				}

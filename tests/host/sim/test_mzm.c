@@ -52,7 +52,7 @@ static void window(ctrl_bias_engine_t *e, plant_t *plant, float bias, float moni
     CHECK(e->last.dc_power == monitor);
 }
 
-static ctrl_calibration_t calibrate(void)
+static ctrl_calibration_t calibrate(bool with_dc)
 {
     ctrl_bias_engine_t e;
     plant_t plant = plant_init();
@@ -61,14 +61,16 @@ static ctrl_calibration_t calibrate(void)
     for (unsigned pass = 0; pass < 2; ++pass) {
         for (unsigned n = 0; n <= 440; ++n) {
             float bias = -5.0f + n * 0.025f;
-            window(&e, &plant, bias, 0); /* receiver settling after bias step */
-            window(&e, &plant, bias, 0);
+            float dc = with_dc ? (float)(0.40 * (1.0 - cos(physical_phase(bias, 0.0)))) : 0.0f;
+            window(&e, &plant, bias, dc); /* receiver settling after bias step */
+            window(&e, &plant, bias, dc);
             CHECK(ctrl_bias_scan_add(&scan, bias, &e.last) == DSP_OK);
         }
         if (pass == 0) CHECK(ctrl_bias_scan_begin_fit(&scan, 1) == DSP_OK);
     }
     ctrl_calibration_t cal;
     CHECK(ctrl_bias_scan_finish(&scan, e.pilot.amplitude, &cal) == DSP_OK);
+    CHECK(cal.has_ref_phases);
     CHECK(fabs(cal.vpi_v - vpi) < 0.01 && fabs(cal.null_v - dark_v) < 0.02);
     return cal;
 }
@@ -87,23 +89,15 @@ static void check_coherent_average(void)
     CHECK(e.last.h1_magnitude < 1e-6 && e.last.h2_magnitude < 1e-6 && e.last.dc_power == 1);
 }
 
-int main(int argc, char **argv)
+static void run_closed_loop(ctrl_calibration_t cal, bias_point_t point, double target,
+                            bool test_freeze_and_drift)
 {
-    CHECK(argc == 2);
-    int degrees = atoi(argv[1]);
-    double target = degrees * PI / 180;
-    bias_point_t point = BIAS_POINT_CUSTOM;
-    if (degrees == 0) point = BIAS_POINT_MIN;
-    if (degrees == 90) point = BIAS_POINT_QUAD;
-    if (degrees == 180) point = BIAS_POINT_MAX;
-    check_coherent_average();
-    ctrl_calibration_t cal = calibrate();
     plant_t plant = plant_init();
     ctrl_bias_engine_t e;
     CHECK(ctrl_bias_engine_init(&e, 64000, 1000, cal.cal_pilot_v, BLOCK, DECIMATION, PILOT) == DSP_OK);
     ctrl_mod_mzm_t m = {.config = {.calibration = cal, .dc_channel = DC, .pilot_channel = PILOT,
-        .kp = 0.25f, .ki = 0.85f, .dt = 0.2f, .min_v = -10, .max_v = 10,
-        .pilot_v = cal.cal_pilot_v}};
+        .kp = 0.0f, .ki = (float)(0.25 * cal.vpi_v / (PI * 0.2)), .dt = 0.2f,
+        .min_v = -10, .max_v = 10, .pilot_v = cal.cal_pilot_v}};
     float sweep[CTRL_DC_CHANNELS] = {0};
     sweep[DC] = cal.null_v + cal.vpi_v * target / PI + 0.16;
     CHECK(ctrl_bias_engine_start(&e, &ctrl_mzm_strategy, &m, point, target, sweep) == DSP_OK);
@@ -122,10 +116,22 @@ int main(int argc, char **argv)
             CHECK(!e.command.locked && !e.command.hold_assist_active);
             streak = 0;
         }
-        if (step >= 220 && step < 320) plant.drift_v += 0.00017;
+        /* Drift across > 0.6 * Vpi when testing Chapter 5 freeze & cross-fringe robustness. */
+        if (test_freeze_and_drift && step >= 220 && step < 340) {
+            plant.drift_v += 0.020; /* total drift +2.4 V > 0.64 * Vpi */
+        } else if (step >= 220 && step < 320) {
+            plant.drift_v += 0.00017;
+        }
+
+        if (test_freeze_and_drift && step >= 360 && step < 370) {
+            plant.power = 0.02; /* forces r < 0.15 -> freeze without fault */
+        } else if (test_freeze_and_drift && step == 370) {
+            plant.power = 0.63;
+            streak = 0;
+        }
+
         float bias = e.command.bias_v[DC];
-        double phase_error = fabs(physical_phase(bias, plant.drift_v) - target);
-        CHECK(phase_error < PI); /* continuous physical branch, no angle wrapping */
+        double phase_error = fabs(remainder(physical_phase(bias, plant.drift_v) - target, DSP_TAU));
         if (step == 260) {
             /* Same optical state and samples, independent CH1 input. */
             ctrl_bias_engine_t twin = e;
@@ -140,15 +146,79 @@ int main(int argc, char **argv)
             window(&e, &plant, bias, step < 260 ? 1 : -9000);
         }
         const ctrl_observer_t *o = &m.observer;
-        bool criteria = o->bias_ok && o->observer_ok && o->radius_ok && o->error_ok && o->phase_ok;
+        if (test_freeze_and_drift && step == 360) {
+            streak = 0; /* step 360 contains the optical power step transient (no T_wait in sim) */
+            continue;
+        }
+        if (test_freeze_and_drift && step >= 361 && step < 370) {
+            CHECK(e.command.frozen && !e.command.locked && e.command.bias_v[DC] == bias);
+            streak = 0;
+            continue;
+        }
+        bool criteria = o->observer_ok && o->radius_ok && o->error_ok && o->phase_ok;
         streak = criteria ? streak + 1 : 0;
+        CHECK(!e.command.frozen);
         CHECK(e.command.locked == criteria && e.command.hold_assist_active == (streak >= 25));
         if (step >= 450) {
             worst = fmax(worst, phase_error * 180 / PI);
             CHECK(criteria && e.command.hold_assist_active);
         }
     }
-    printf("%d deg target: worst final-window error %.4f deg\n", degrees, worst);
     CHECK(worst < 1.5);
+}
+
+static void check_mzm_strategy_freeze_and_fringe_clamp(void)
+{
+    const ctrl_calibration_t identity = {.fit.m = {{1, 0}, {0, 1}}, .vpi_v = 2.0f,
+                                         .null_v = -1.0f, .cal_pilot_v = 0.1f};
+    ctrl_mod_mzm_t m = {.config = {.calibration = identity, .dc_channel = 0, .pilot_channel = 0,
+                                   .kp = 0.0f, .ki = 1.0f, .dt = 0.1f, .min_v = -10.0f, .max_v = 10.0f,
+                                   .pilot_v = 0.1f}};
+    float sweep[CTRL_DC_CHANNELS] = {0.0f};
+    ctrl_command_t cmd;
+    CHECK(ctrl_mzm_strategy.start(&m, BIAS_POINT_QUAD, 0.0f, sweep, &cmd) == DSP_OK);
+    /* Integrator clamping spans full [min_v, max_v], not anchor +/- Vpi/2. */
+    CHECK(m.pid.out_min == -10.0f && m.pid.out_max == 10.0f);
+
+    /* Drive bias past anchor + Vpi/2 (1.0 V) to verify no artificial fringe clamp. */
+    harmonic_data_t pilots[CTRL_PILOTS] = {{.h1_magnitude = 0.5f, .h2_magnitude = 0.8660254f,
+                                            .h2_phase = DSP_TAU / 4.0}};
+    for (int i = 0; i < 15; ++i) {
+        CHECK(ctrl_mzm_strategy.update(&m, pilots, &cmd) == DSP_OK);
+        CHECK(!cmd.frozen);
+    }
+    CHECK(cmd.bias_v[0] > 1.2f);
+
+    /* Frozen update must preserve bias and pid.integral_v, set frozen=true, return DSP_OK. */
+    float held_bias = cmd.bias_v[0];
+    double held_integ = m.pid.integral_v;
+    harmonic_data_t zero_j0[CTRL_PILOTS] = {{.h1_magnitude = 0.05f, .h2_magnitude = 0.05f,
+                                             .h2_phase = DSP_TAU / 4.0}};
+    CHECK(ctrl_mzm_strategy.update(&m, zero_j0, &cmd) == DSP_OK);
+    CHECK(cmd.frozen && !cmd.locked && !cmd.hold_assist_active);
+    CHECK(cmd.bias_v[0] == held_bias && m.pid.integral_v == held_integ);
+}
+
+int main(int argc, char **argv)
+{
+    CHECK(argc == 2);
+    int degrees = atoi(argv[1]);
+    double target = degrees * PI / 180;
+    bias_point_t point = BIAS_POINT_CUSTOM;
+    if (degrees == 0) point = BIAS_POINT_MIN;
+    if (degrees == 90) point = BIAS_POINT_QUAD;
+    if (degrees == 180) point = BIAS_POINT_MAX;
+    check_coherent_average();
+    check_mzm_strategy_freeze_and_fringe_clamp();
+
+    /* Legacy zero-DC fallback path. */
+    ctrl_calibration_t cal_no_dc = calibrate(false);
+    run_closed_loop(cal_no_dc, point, target, false);
+
+    /* Thesis Ch.5 Fitzgibbon + CH1 DC path with large thermal drift & r<0.15 freeze. */
+    ctrl_calibration_t cal_dc = calibrate(true);
+    run_closed_loop(cal_dc, point, target, true);
+
+    printf("%d deg target: Chapter 5 Fitzgibbon+DC & zero-DC fallback passed\n", degrees);
     return 0;
 }

@@ -18,7 +18,8 @@ typedef struct {
 typedef struct {
     ctrl_routes_t routes;
     float bias_v[CTRL_DC_CHANNELS];
-    bool locked, hold_assist_active;
+    float rho_ema;
+    bool locked, hold_assist_active, frozen;
 } ctrl_command_t;
 
 /* State belongs to the caller. start produces the initial sweep-seeded

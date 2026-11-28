@@ -21,3 +21,5 @@ target_sources(app PRIVATE
   ../../app/src/ctrl_thread.c
   ../../app/src/cli_service.c
 )
+
+target_compile_definitions(app PRIVATE BIAS_FW_REV="ztest")

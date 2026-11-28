@@ -3,7 +3,7 @@
 #include <math.h>
 
 #define PI (DSP_TAU / 2.0)
-enum { DC_WARMUP = 5, HOLD_UPDATES = 25 };
+enum { HOLD_UPDATES = 25 };
 
 static void clear_lock(ctrl_observer_t *s)
 {
@@ -37,6 +37,8 @@ dsp_status_t ctrl_observer_set_pilot(ctrl_observer_t *s, float pilot_v)
         return DSP_INVALID_ARGUMENT;
     s->scaled = false;
     clear_lock(s);
+    s->frozen = false;
+    s->rho_ema = 0.0f;
     if (!isfinite(pilot_v) || pilot_v < 0 || !(s->cal.vpi_v > 0))
         return DSP_INVALID_ARGUMENT;
 
@@ -69,7 +71,7 @@ dsp_status_t ctrl_observer_init(ctrl_observer_t *s, const ctrl_calibration_t *ca
     if (!s || !cal || !isfinite(cal->null_v) || !isfinite(cal->vpi_v) ||
         cal->vpi_v <= 0 || !isfinite(cal->cal_pilot_v) || cal->cal_pilot_v < 0 ||
         !isfinite(target_v) || !isfinite(sweep_v) ||
-        (cal->has_obs_dc_seed && !isfinite(cal->obs_dc_seed)))
+        (cal->has_ref_phases && (!isfinite(cal->h1_ref_phase) || !isfinite(cal->h2_ref_phase))))
         return DSP_INVALID_ARGUMENT;
     for (unsigned i = 0; i < 2; ++i)
         if (!isfinite(cal->fit.o[i]) || !isfinite(cal->fit.m[i][0]) ||
@@ -78,34 +80,13 @@ dsp_status_t ctrl_observer_init(ctrl_observer_t *s, const ctrl_calibration_t *ca
 
     double target = PI * ((double)target_v - cal->null_v) / cal->vpi_v;
     double seed = PI * ((double)sweep_v - cal->null_v) / cal->vpi_v;
-    if (fabs(seed) > FLT_MAX)
+    if (fabs(seed) > FLT_MAX || fabs(target) > FLT_MAX)
         return DSP_INVALID_ARGUMENT;
     *s = (ctrl_observer_t){.cal = *cal, .target_v = target_v,
+                           .target_rad = (float)remainder(target, DSP_TAU),
                            .target_sin = sin(target), .target_cos = cos(target),
                            .obs_x = sin(seed), .obs_y = cos(seed), .phase_rad = seed};
     return ctrl_observer_set_pilot(s, pilot_v);
-}
-
-static void update_error(ctrl_observer_t *s, float weight)
-{
-    s->obs_raw = s->target_sin * s->obs_y - s->target_cos * s->obs_x;
-    float corrected = s->obs_raw;
-    if (weight > 0.01f) {
-        if (!s->has_sample) {
-            s->obs_dc = s->cal.has_obs_dc_seed ? s->cal.obs_dc_seed : s->obs_raw;
-            s->dc_count = s->cal.has_obs_dc_seed ? DC_WARMUP : 0;
-        } else if (s->dc_count < DC_WARMUP || s->locked) {
-            s->obs_dc += 0.50f * (s->obs_raw - s->obs_dc);
-            if (s->dc_count < DC_WARMUP)
-                ++s->dc_count;
-        }
-        if (s->dc_count == DC_WARMUP)
-            corrected -= s->obs_dc;
-    }
-    float alpha = 1 - 0.90f * weight;
-    s->obs_filtered = s->has_sample ? s->obs_filtered + alpha * (corrected - s->obs_filtered)
-                                    : corrected;
-    s->error = s->obs_filtered + s->spring;
 }
 
 dsp_status_t ctrl_observer_update(ctrl_observer_t *s, const harmonic_data_t *h,
@@ -113,62 +94,52 @@ dsp_status_t ctrl_observer_update(ctrl_observer_t *s, const harmonic_data_t *h,
 {
     if (!s)
         return DSP_INVALID_ARGUMENT;
-    s->observer_ok = s->radius_ok = s->error_ok = s->phase_ok = s->bias_ok = false;
+    s->observer_ok = s->radius_ok = s->error_ok = s->phase_ok = false;
     if (!s->scaled || !h || !isfinite(bias_v) || !isfinite(h->h1_phase) ||
         !isfinite(h->h2_phase) || !isfinite(h->h1_magnitude) || h->h1_magnitude < 0 ||
         !isfinite(h->h2_magnitude) || h->h2_magnitude < 0) {
         clear_lock(s);
+        s->frozen = false;
         return DSP_INVALID_ARGUMENT;
     }
 
-    double bias_delta = ((double)bias_v - s->target_v) / s->cal.vpi_v;
-    s->bias_ok = fabs(bias_delta) <= 0.30;
-    double h1 = (double)h->h1_magnitude * cosf(h->h1_phase) - s->cal.fit.o[0];
-    double h2 = (double)h->h2_magnitude * sinf(h->h2_phase) - s->cal.fit.o[1];
+    double theta1 = s->cal.has_ref_phases ? (double)s->cal.h1_ref_phase : 0.0;
+    double theta2 = s->cal.has_ref_phases ? (double)s->cal.h2_ref_phase : (DSP_TAU / 4.0);
+    double h1 = (double)h->h1_magnitude * cos((double)h->h1_phase - theta1) - s->cal.fit.o[0];
+    double h2 = (double)h->h2_magnitude * cos((double)h->h2_phase - theta2) - s->cal.fit.o[1];
     double x = s->inverse[0][0] * h1 + s->inverse[0][1] * h2;
     double y = s->inverse[1][0] * h1 + s->inverse[1][1] * h2;
     double radius = hypot(x, y);
-    if (radius > FLT_MAX) {
+    if (!isfinite(radius) || radius > FLT_MAX) {
         clear_lock(s);
+        s->frozen = false;
         return DSP_INVALID_ARGUMENT;
     }
     s->radius = (float)radius;
-    s->radius_ok = radius >= 0.10f;
+    s->radius_ok = s->radius >= 0.15f;
     if (!s->radius_ok) {
         clear_lock(s);
+        s->frozen = true;
         return DSP_INCOMPLETE;
     }
-    float weight = s->target_sin * s->target_sin;
-    double spring = weight > 0.01f ? -0.60 * weight * bias_delta : 0;
-    if (fabs(spring) > FLT_MAX) {
-        clear_lock(s);
-        return DSP_INVALID_ARGUMENT;
-    }
 
-    if (s->has_sample) {
-        float ax = 0.08f + 0.22f * fabsf(s->target_cos);
-        float ay = 0.02f - 0.015f * fabsf(s->target_sin);
-        x = s->obs_x + ax * (x / radius - s->obs_x);
-        y = s->obs_y + ay * (y / radius - s->obs_y);
-        double norm = hypot(x, y);
-        double step = remainder(atan2(x, y) - s->phase_rad, DSP_TAU);
-        if (norm < 0.10 || fabs(step) > PI / 2) {
-            clear_lock(s);
-            return DSP_INCOMPLETE;
-        }
-        s->obs_x = (float)(x / norm);
-        s->obs_y = (float)(y / norm);
-        s->phase_rad += (float)step;
-    }
+    s->frozen = false;
+    double ux = x / radius;
+    double uy = y / radius;
+    double inst_rad = atan2(ux, uy);
+    double step = remainder(inst_rad - (double)s->phase_rad, DSP_TAU);
 
-    s->observer_ok = true;
-    s->spring = (float)spring;
-    update_error(s, weight);
+    s->obs_x = (float)ux;
+    s->obs_y = (float)uy;
+    s->phase_rad += (float)step;
+    s->error = (float)remainder((double)s->target_rad - inst_rad, DSP_TAU);
+    s->rho_ema = 0.9f * s->rho_ema + 0.1f * fabsf(s->radius - 1.0f);
     s->has_sample = true;
-    s->error_ok = fabsf(s->error) < 0.20 / PI;
+    s->observer_ok = true;
+    s->error_ok = fabsf(s->error) < (float)(0.20 / PI);
     /* Target hemisphere rejects the opposite fringe even at zero sine error. */
-    s->phase_ok = s->obs_x * s->target_sin + s->obs_y * s->target_cos > 0;
-    s->locked = s->bias_ok && s->observer_ok && s->radius_ok && s->error_ok && s->phase_ok;
+    s->phase_ok = s->obs_x * s->target_sin + s->obs_y * s->target_cos > 0.0f;
+    s->locked = s->observer_ok && s->radius_ok && s->error_ok && s->phase_ok;
     if (!s->locked)
         clear_lock(s);
     else if (s->lock_streak < HOLD_UPDATES)

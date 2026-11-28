@@ -2,6 +2,10 @@
 #include "rt_pipeline.h"
 
 #include <ads131m02.h>
+#include <zephyr/sys/byteorder.h>
+#ifdef CONFIG_BOARD_BIASCTRL_H503
+#include <cmsis_core.h>
+#endif
 #include <dac8568.h>
 #include <dsp_goertzel.h>
 #include <dsp_pilot_gen.h>
@@ -44,6 +48,50 @@ static dc_accum_t dc_monitor;
 static pilot_gen_t pilot;
 static float requested_amp;
 static uint32_t sequence;
+
+static int32_t low[2], high[2];
+static struct {
+	bool pending, step;
+	uint32_t boundary;
+	uint16_t code, final_code;
+	float amp;
+} scheduled;
+
+static uint8_t packed[DSP_GOERTZEL_BLOCK_SIZE][3];
+BUILD_ASSERT(sizeof(packed) == 3840);
+static K_SEM_DEFINE(capture_done, 0, 1);
+static bool capturing, capture_dump;
+static uint32_t capture_count, capture_pos, previous;
+static rt_adc_stats_t timing;
+
+static void capture_sample(int32_t sample, uint32_t now)
+{
+	if (capture_pos > capture_count) {
+		return;
+	}
+	if (!capture_pos) {
+		timing.first = now;
+	}
+	if (capture_dump) {
+		sys_put_le24((uint32_t)sample, packed[capture_pos]);
+	} else if (capture_pos) {
+		uint32_t dt = now - previous;
+		timing.total += dt;
+		timing.min = MIN(timing.min, dt);
+		timing.max = MAX(timing.max, dt);
+	}
+	previous = now;
+	if (++capture_pos == capture_count + (capture_dump ? 0U : 1U)) {
+		capture_pos = capture_count + 1;
+		k_sem_give(&capture_done);
+	}
+}
+
+int32_t rt_pipeline_dump_sample(unsigned index)
+{
+	uint32_t raw = sys_get_le24(packed[index]);
+	return (int32_t)(raw ^ 0x800000U) - 0x800000;
+}
 
 static void cleanup(struct k_work *work)
 {
@@ -102,6 +150,7 @@ static int trip(int error)
 		}
 		atomic_clear(&dc_pending);
 		k_sem_give(&dc_done);
+		k_sem_give(&capture_done);
 		k_work_submit(&fault_work);
 	}
 	return atomic_get(&fault);
@@ -110,6 +159,11 @@ static int trip(int error)
 int rt_pipeline_fault(void)
 {
 	return atomic_get(&fault);
+}
+
+bool rt_pipeline_dc_pending(void)
+{
+	return atomic_get(&dc_pending) != 0;
 }
 
 uint32_t rt_pipeline_drop_count(void)
@@ -153,7 +207,7 @@ int rt_pipeline_init(const analog_board_ops_t *ops, rt_pipeline_fault_cb_t callb
 	return rc;
 }
 
-static int goertzel_result_fast(const goertzel_state_t *g, float *mag, float *phase)
+static int goertzel_result_fast(const goertzel_state_t *g, float *mag, float *phase, float *iq)
 {
 	if (!goertzel_block_ready(g)) {
 		return -EIO;
@@ -166,6 +220,8 @@ static int goertzel_result_fast(const goertzel_state_t *g, float *mag, float *ph
 	}
 	*mag = (2.0f * sqrtf(re * re + im * im)) / (float)g->block_size;
 	*phase = atan2f(im, re);
+	iq[0] = re * (2.f / DSP_GOERTZEL_BLOCK_SIZE);
+	iq[1] = im * (2.f / DSP_GOERTZEL_BLOCK_SIZE);
 	return 0;
 }
 
@@ -173,14 +229,21 @@ static int publish_block(uint32_t timestamp)
 {
 	rt_pipeline_block_t block = {
 		.seq = sequence++,
+		.t_ms = k_uptime_get_32(),
 		.timestamp_cycles = timestamp,
 		.pilot_amplitude_v = pilot.amplitude,
 	};
 	harmonic_data_t *h = &block.harmonics;
 
-	if (goertzel_result_fast(&h1, &h->h1_magnitude, &h->h1_phase) != 0 ||
-	    goertzel_result_fast(&h2, &h->h2_magnitude, &h->h2_phase) != 0) {
+	if (goertzel_result_fast(&h1, &h->h1_magnitude, &h->h1_phase, block.iq) != 0 ||
+	    goertzel_result_fast(&h2, &h->h2_magnitude, &h->h2_phase, block.iq + 2) != 0) {
 		return trip(-EIO);
+	}
+	for (unsigned i = 0; i < 2; ++i) {
+		block.min_v[i] = low[i] * RT_PIPELINE_ADC_V_PER_COUNT;
+		block.max_v[i] = high[i] * RT_PIPELINE_ADC_V_PER_COUNT;
+		low[i] = INT32_MAX;
+		high[i] = INT32_MIN;
 	}
 	h->dc_power = dc_accum_get_mean(&dc_monitor);
 	if (!isfinite(h->dc_power)) {
@@ -195,6 +258,16 @@ static int publish_block(uint32_t timestamp)
 	return 0;
 }
 
+/* Complete SPI1 DMA and latch the output within the shared deadline. */
+static int finish_dac(uint32_t start_cycle, uint32_t limit)
+{
+	int rc;
+	do {
+		rc = dac8568_status();
+	} while (rc == -EBUSY && k_cycle_get_32() - start_cycle < limit);
+	return rc == -EBUSY ? -ETIMEDOUT : rc;
+}
+
 int rt_pipeline_ingest(int32_t ch0, int32_t ch1, int error, uint32_t timestamp_cycles)
 {
 	if (!atomic_get(&running)) {
@@ -205,6 +278,14 @@ int rt_pipeline_ingest(int32_t ch0, int32_t ch1, int error, uint32_t timestamp_c
 	if (error) {
 		return trip(error < 0 ? error : -EIO);
 	}
+	if (capturing) {
+		capture_sample(ch0, timestamp_cycles);
+		return 0;
+	}
+	low[0] = MIN(low[0], ch0);
+	high[0] = MAX(high[0], ch0);
+	low[1] = MIN(low[1], ch1);
+	high[1] = MAX(high[1], ch1);
 	if (!h1.count && pilot_gen_set_amplitude(&pilot, requested_amp) != DSP_OK) {
 		return trip(-EIO);
 	}
@@ -227,43 +308,65 @@ int rt_pipeline_ingest(int32_t ch0, int32_t ch1, int error, uint32_t timestamp_c
 		return trip(-EIO);
 	}
 
-	if (atomic_get(&dc_pending)) {
+	bool boundary = scheduled.pending && dc_accum_ready(&dc_monitor) &&
+			sequence == scheduled.boundary;
+	if (boundary || atomic_get(&dc_pending)) {
+		uint8_t channel = boundary ? 0 : pending_dc;
+		uint16_t value = boundary ? scheduled.code : pending_code;
 		int dc_rc = 0;
 
 		if (physical_dac) {
-			const uint32_t wait_limit = k_us_to_cyc_ceil32(8);
-
-			do {
-				dc_rc = dac8568_status();
-			} while (dc_rc == -EBUSY &&
-				 (k_cycle_get_32() - pilot_start) < wait_limit);
+			dc_rc = finish_dac(pilot_start, k_us_to_cyc_ceil32(8));
 		}
 		if (dc_rc == 0) {
 			dc_rc = physical_dac ?
-				dac8568_set_dc_code_async(pending_dc, pending_code) :
-				board->set_dc_code(pending_dc, pending_code);
+				dac8568_set_dc_code_async(channel, value) :
+				board->set_dc_code(channel, value);
 		}
 		if (dc_rc == -EBUSY) {
 			dc_rc = -ETIMEDOUT;
 		}
-		dc_result = dc_rc;
-		__DMB();
-		atomic_clear(&dc_pending);
-		k_sem_give(&dc_done);
+		if (boundary) {
+			requested_amp = scheduled.amp;
+			scheduled.pending = scheduled.step;
+			scheduled.step = false;
+			scheduled.code = scheduled.final_code;
+			scheduled.boundary += 15;
+		} else {
+			dc_result = dc_rc;
+			atomic_clear(&dc_pending);
+			k_sem_give(&dc_done);
+		}
 		if (dc_rc < 0) {
 			return trip(dc_rc);
 		}
 	}
-	return dc_accum_ready(&dc_monitor) ? publish_block(timestamp_cycles) : 0;
+	if (!dc_accum_ready(&dc_monitor)) {
+		return 0;
+	}
+	rc = publish_block(timestamp_cycles);
+	if (!rc && boundary && physical_dac) {
+		rc = finish_dac(pilot_start, k_us_to_cyc_ceil32(12));
+		if (rc) {
+			return trip(rc);
+		}
+	}
+	return rc;
 }
 
 static void adc_callback(const struct bias_ads131m02_sample *sample, int error, void *unused)
 {
 	ARG_UNUSED(unused);
+	uint32_t timestamp;
+#ifdef CONFIG_BOARD_BIASCTRL_H503
+	timestamp = DWT->CYCCNT;
+#else
+	timestamp = k_cycle_get_32();
+#endif
 	if (!sample) {
-		rt_pipeline_ingest(0, 0, error ? error : -EIO, k_cycle_get_32());
+		rt_pipeline_ingest(0, 0, error ? error : -EIO, timestamp);
 	} else {
-		rt_pipeline_ingest(sample->channel[0], sample->channel[1], error, k_cycle_get_32());
+		rt_pipeline_ingest(sample->channel[0], sample->channel[1], error, timestamp);
 	}
 }
 
@@ -295,6 +398,13 @@ static int start(bool hardware)
 			goto out;
 		}
 	}
+	low[0] = low[1] = INT32_MAX;
+	high[0] = high[1] = INT32_MIN;
+	scheduled.pending = false;
+#ifdef CONFIG_BOARD_BIASCTRL_H503
+	CoreDebug->DEMCR |= CoreDebug_DEMCR_TRCENA_Msk;
+	DWT->CTRL |= DWT_CTRL_CYCCNTENA_Msk;
+#endif
 	sequence = 0;
 	k_msgq_purge(&rt_pipeline_blocks);
 	k_sem_reset(&dc_done);
@@ -409,5 +519,96 @@ int rt_pipeline_set_dc_code(uint8_t dc, uint16_t code)
 		}
 	}
 	k_mutex_unlock(&control);
+	return rc;
+}
+
+int rt_pipeline_schedule(uint16_t code, float amplitude, bool step, uint16_t final_code,
+			 uint32_t *first_seq)
+{
+	unsigned int key = irq_lock();
+	int rc = rt_pipeline_fault();
+	if (!rc && (!atomic_get(&running) || scheduled.pending)) {
+		rc = -EBUSY;
+	}
+	if (!rc) {
+		scheduled.boundary = sequence;
+		scheduled.code = code;
+		scheduled.final_code = final_code;
+		scheduled.step = step;
+		scheduled.amp = amplitude;
+		scheduled.pending = true;
+		*first_seq = sequence + 1 + (step ? 15U : 0U);
+	}
+	irq_unlock(key);
+	return rc;
+}
+
+int rt_pipeline_read_regs(uint16_t regs[4])
+{
+	k_mutex_lock(&control, K_FOREVER);
+	int rc = atomic_get(&running) ? -EBUSY : bias_ads131m02_read_reg(0, &regs[0]);
+	if (rc == -EACCES) {
+		/* Cold boot only. Preserve the live configuration on subsequent reads. */
+		rc = bias_ads131m02_init(BIAS_ADS131M02_64_KSPS);
+		if (!rc) {
+			rc = bias_ads131m02_read_reg(0, &regs[0]);
+		}
+	}
+	for (unsigned i = 1; !rc && i < 4; ++i) {
+		rc = bias_ads131m02_read_reg(i, &regs[i]);
+	}
+	k_mutex_unlock(&control);
+	return rc;
+}
+
+/* Called by the controller while it owns the idle board. Stop the ADC before
+ * returning the segment to its UART consumer. */
+int rt_pipeline_capture(bool dump, uint32_t count, bool manual, rt_adc_stats_t *stats)
+{
+	if (!count || count > (dump ? ARRAY_SIZE(packed) : 1000000U)) {
+		return -ERANGE;
+	}
+	capture_pos = 0;
+	capture_count = count;
+	capture_dump = dump;
+	timing = (rt_adc_stats_t){.min = UINT32_MAX};
+	capturing = true;
+	k_sem_reset(&capture_done);
+	int rc = board->set_pilot_code(0, 32768);
+	if (!rc && physical_dac) {
+		rc = finish_dac(k_cycle_get_32(), k_us_to_cyc_ceil32(1000));
+	}
+	if (!rc) {
+		rc = start(!manual);
+	}
+	if (!rc) {
+		k_timeout_t timeout = K_MSEC(count / 64 + 250);
+#ifdef CONFIG_BOARD_BIASCTRL_H503
+		/* CYCCNT can halt in WFI. Keep the core awake during a rate
+		 * measurement. Interrupts and higher priority threads stay enabled. */
+		if (!dump && !manual) {
+			int64_t deadline = k_uptime_get() + count / 64 + 250;
+			while ((rc = k_sem_take(&capture_done, K_NO_WAIT)) &&
+			       k_uptime_get() < deadline) {
+				k_busy_wait(50);
+			}
+			if (rc) {
+				rc = -ETIMEDOUT;
+			}
+		} else
+#endif
+		{
+			rc = k_sem_take(&capture_done, timeout);
+		}
+		if (rc == -EAGAIN) {
+			rc = -ETIMEDOUT;
+		}
+		int stop_rc = rt_pipeline_stop();
+		if (stop_rc) {
+			rc = stop_rc;
+		}
+	}
+	capturing = false;
+	*stats = timing;
 	return rc;
 }

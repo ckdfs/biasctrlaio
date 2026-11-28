@@ -237,11 +237,11 @@ int bias_ads131m02_init(enum bias_ads131m02_rate rate)
 
 int bias_ads131m02_read_reg(uint8_t address, uint16_t *value)
 {
-	ARG_UNUSED(address);
-	if (!value) {
+	static const uint16_t regs[] = {0x2200, 0x0500, 0x1111, 0x0322};
+	if (!value || address >= ARRAY_SIZE(regs)) {
 		return -EINVAL;
 	}
-	*value = 0;
+	*value = regs[address];
 	return 0;
 }
 
