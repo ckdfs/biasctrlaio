@@ -1,11 +1,11 @@
 # EXP-007：C1 硬件基准体检与 C2 电光阶跃恢复及重复性验证
 
-- **实验日期**：2026-11-26（`DM858E` 直流线性度与 `SDS824X HD` 偏压输出端示波器特性补测均于 2026-11-28 完成）
+- **实验日期**：2026-11-26（`DM858E` 直流线性度、`SDS824X HD` `VA` 导频/噪声/阶跃及 `C48.1 -> VA` 双通道相移补测均于 2026-11-28 完成）
 - **关联任务**：`openspec/changes/07-affine-thesis-experiments/`（`t4_exp_c1_c2`）
 - **硬件与固件版本**：`20261110-底板`（`STM32H503CBT6` @ `250 MHz`）+ `20261110-MZM` 模拟子板（`U7` 旁路、`TS5A23159` 拆除飞线直连 `DITHER1 -> VA` / `DITHER2 -> VC`、`ADS131M02 CLOCK=0x0322` @ `64 kSPS`），固件 `P7 rev=b4bd711-dirty`
-- **光路条件**：C1/C2 主试验采用固定功率 `1550 nm` 激光器 -> 偏振控制器（PC）-> MZM -> `1:9` 分光器 -> `10%` 监测光接入 `H1 (PD IN)`，`90%` 主路无外接探测器；C1 外部直流线性度与示波器补测期间保持断开 MZM 负载，分别将 `RIGOL DM858E` 与 `Siglent SDS824X HD`（`C1` `10×` 探头）直连 `CN1 VA` 输出端
-- **外部仪器状态**：`RIGOL DG922 Pro` 全程保持射频输出关闭（`:OUTP1? = 0`）；外部补测使用 `RIGOL DM858E` 五位半数字万用表（`192.168.99.147:5025`，`DM8E275002095`）与 `Siglent SDS824X HD` 数字示波器（`192.168.99.157:5025`，`SDS08A0XA05949`，FW `4.8.12.1.1.6.5`，`12-bit`，`C1` `10×` 探头 + `20 MHz` 带宽限制）
-- **原始日志与归档数据**：`.agent-bridge/exp_runs/c1_c2_live/`、`.agent-bridge/exp_runs/c1_dc_linearity_live/`、`.agent-bridge/exp_runs/c1_va_scope_live/`；归档汇总与图件见 [c1_c2_summary.json](../data/c1_c2/c1_c2_summary.json)、[c2_step_peaks.csv](../data/c1_c2/c2_step_peaks.csv)、[c2_twait_scan.csv](../data/c1_c2/c2_twait_scan.csv)、[c1_c2_fft_and_twait.png](../data/c1_c2/c1_c2_fft_and_twait.png)、[c1_dc_linearity_summary.json](../data/c1_c2/c1_dc_linearity_summary.json)、[c1_dc_full_sweep.csv](../data/c1_c2/c1_dc_full_sweep.csv)、[c1_dc_single_code_dnl.csv](../data/c1_c2/c1_dc_single_code_dnl.csv)、[c1_dc_linearity.png](../data/c1_c2/c1_dc_linearity.png)、[c1_va_scope_summary.json](../data/c1_c2/c1_va_scope_summary.json)、[c1_va_pilot_sweep.csv](../data/c1_c2/c1_va_pilot_sweep.csv)、[c1_va_scope_char.png](../data/c1_c2/c1_va_scope_char.png)
+- **光路条件**：C1/C2 主试验采用固定功率 `1550 nm` 激光器 -> 偏振控制器（PC）-> MZM -> `1:9` 分光器 -> `10%` 监测光接入 `H1 (PD IN)`，`90%` 主路无外接探测器；C1 外部直流线性度与示波器补测期间保持断开 MZM 负载，分别将 `RIGOL DM858E` 与 `Siglent SDS824X HD` 接至 `CN1 VA`（`C1` `1×` 探头/直连，`C1:ATTN=1`），并在双通道相移测试中增加 `C2`（`10×` 探头，`C2:ATTN=10`）探接 `C48.1 (DITHER1)`
+- **外部仪器状态**：`RIGOL DG922 Pro` 全程保持射频输出关闭（`:OUTP1? = 0`）；外部补测使用 `RIGOL DM858E` 五位半数字万用表（`192.168.99.147:5025`，`DM8E275002095`）与 `Siglent SDS824X HD` 数字示波器（`192.168.99.157:5025`，`SDS08A0XA05949`，FW `4.8.12.1.1.6.5`，`12-bit`，`C1 ATTN=1` / `C2 ATTN=10` + `20 MHz` 带宽限制）
+- **原始日志与归档数据**：`.agent-bridge/exp_runs/c1_c2_live/`、`.agent-bridge/exp_runs/c1_dc_linearity_live/`、`.agent-bridge/exp_runs/c1_va_scope_live/`、`.agent-bridge/exp_runs/c1_pilot_phase_live/`；归档汇总与图件见 [c1_c2_summary.json](../data/c1_c2/c1_c2_summary.json)、[c2_step_peaks.csv](../data/c1_c2/c2_step_peaks.csv)、[c2_twait_scan.csv](../data/c1_c2/c2_twait_scan.csv)、[c1_c2_fft_and_twait.png](../data/c1_c2/c1_c2_fft_and_twait.png)、[c1_dc_linearity_summary.json](../data/c1_c2/c1_dc_linearity_summary.json)、[c1_dc_full_sweep.csv](../data/c1_c2/c1_dc_full_sweep.csv)、[c1_dc_single_code_dnl.csv](../data/c1_c2/c1_dc_single_code_dnl.csv)、[c1_dc_linearity.png](../data/c1_c2/c1_dc_linearity.png)、[c1_va_scope_summary.json](../data/c1_c2/c1_va_scope_summary.json)、[c1_va_pilot_sweep.csv](../data/c1_c2/c1_va_pilot_sweep.csv)、[c1_va_scope_char.png](../data/c1_c2/c1_va_scope_char.png)、[c1_pilot_phase_summary.json](../data/c1_c2/c1_pilot_phase_summary.json)、[c1_pilot_phase_sweep.csv](../data/c1_c2/c1_pilot_phase_sweep.csv)、[c1_pilot_phase_char.png](../data/c1_c2/c1_pilot_phase_char.png)
 
 ## 1. C1 板载硬件基准体检
 
@@ -73,27 +73,30 @@
 | 单码微分非线性（DNL）与 MSB 进位 | 全局 DNL / `32767 -> 32768` | 全局 DNL **`[-0.303, +0.404] LSB`**（`RMS = 0.212 LSB`）；MSB 进位 **`+315.69 µV`**（**`+0.035 LSB`**） | `MSB` 主进位平滑无失码与非单调跳变 |
 | 中点静止本底（`code=32768`，`20` 次，`0.1 V` 档，`20 NPLC`） | 均值 / 标准差 / 峰峰值 | `+4.042 mV` / `std = 2.64 µV` / `pk-pk = 10.08 µV` | 测量链路噪声极低（`< 3 µV` RMS） |
 
-### 1.6 偏压电极 `VA` 导频注入、静止杂散谱与阶跃响应（`SDS824X HD`，2026-11-28 补测）
+### 1.6 偏压电极 `VA` 导频注入、双通道相移、静止杂散谱与阶跃响应（`SDS824X HD`，2026-11-28 补测）
 
-保持 MZM 负载断开，将 `Siglent SDS824X HD` 单通道 `C1`（`10×` 探头，开启 `20 MHz` 带宽限制）接至 `CN1 VA` 输出端，运行 [run_c1_va_scope.py](../../../scripts/experiments/run_c1_va_scope.py) 完成 `1 kHz` 导频注入特性、静止噪声/杂散谱及 `0 <-> +500 mV` 直流阶跃响应测量，归档数据与三联图见 [c1_va_scope_summary.json](../data/c1_c2/c1_va_scope_summary.json)、[c1_va_pilot_sweep.csv](../data/c1_c2/c1_va_pilot_sweep.csv) 与 [c1_va_scope_char.png](../data/c1_c2/c1_va_scope_char.png)。
+保持 MZM 负载断开，首先将 `Siglent SDS824X HD` 单通道 `C1`（`1×` 探头/直连，`C1:ATTN=1`，`20 MHz` 带宽限制）接至 `CN1 VA` 输出端，运行 [run_c1_va_scope.py](../../../scripts/experiments/run_c1_va_scope.py) 完成 `1 kHz` 导频注入增益、静止噪声/杂散谱及 `0 <-> +500 mV` 直流阶跃响应测量；随后增接 `C2`（`10×` 探头，`C2:ATTN=10`）至 `C48.1 (DITHER1)` 源端，运行 [run_c1_pilot_phase.py](../../../scripts/experiments/run_c1_pilot_phase.py) 同帧捕获 `VA` 与 `C48.1` 双通道波形，完成 `1 kHz` 注入传递函数与相移实测。归档数据与图件见 [c1_va_scope_summary.json](../data/c1_c2/c1_va_scope_summary.json)、[c1_va_pilot_sweep.csv](../data/c1_c2/c1_va_pilot_sweep.csv)、[c1_va_scope_char.png](../data/c1_c2/c1_va_scope_char.png)、[c1_pilot_phase_summary.json](../data/c1_c2/c1_pilot_phase_summary.json)、[c1_pilot_phase_sweep.csv](../data/c1_c2/c1_pilot_phase_sweep.csv) 与 [c1_pilot_phase_char.png](../data/c1_c2/c1_pilot_phase_char.png)。
 
 ![VA 电极 1 kHz 导频注入增益/THD、静止杂散谱与 0.5 V 阶跃响应](../data/c1_c2/c1_va_scope_char.png)
+
+![C48.1 至 VA 双通道 1 kHz 导频相移、直测增益与跨偏压平坦度](../data/c1_c2/c1_pilot_phase_char.png)
 
 | 测试分项与条件 | 实测指标 | 实测结果 | 工程对照与说明 |
 | --- | --- | --- | --- |
 | 工作导频跨偏压扫查（`159.2 mV` 命令 / `1.592 V_pk` 源，`-8 / -4 / 0 / +4 / +8 V`） | 基波均值 / 注入增益 / 平坦度 | `149.824 mV_pk`（期望 `150.046 mV_pk`）/ `0.09411 V/V`（偏差 `-0.148%`）/ `0.087%` pk-pk（`0.034%` std） | 各档实测 `-8V=149.855`、`-4V=149.893`、`0V=149.796`、`+4V=149.763`、`+8V=149.811 mV_pk`；`0 V` 谐波 `f0=999.629 Hz`、`H2=-54.99 dBc`、`H3=-68.53 dBc`、`H4=-71.65 dBc`、`H5=-64.96 dBc`，`THD(2..5)=0.1988%`、**`THD(2..10)=0.2124%`（`-53.60 dB`）**（`PAVA PKPK=342 mV, RMS=106 mV`） |
 | 设计口径导频扫查（`150.0 mV` 命令 / `1.500 V_pk` 源，`-8 ~ +8 V`） | 基波均值 / 注入增益 / THD | `141.155 mV_pk`（期望 `141.375 mV_pk`）/ `0.09410 V/V`（`-0.156%`）/ `0.318%` pk-pk（`0.115%` std） | 与表 3.1 `141.4 mV` 预算吻合；`0 V` 处 `140.963 mV_pk`，`H2=-56.96 dBc`、`H3=-69.13 dBc`，`THD(2..10)=0.1819%`（`-55.13 dB`，`PAVA PKPK=328 mV, RMS=100 mV`） |
 | `0 V` 四档幅度线性度（`84.9 / 130.0 / 150.0 / 159.2 mV`） | `84.9 / 130.0 mV` 实测均值 / 增益 / THD | `84.9 mV -> 79.846 mV_pk`（`0.09405`, `-0.215%`, `THD=0.2279%`）；`130.0 mV -> 122.412 mV_pk`（`0.09416`, `-0.092%`, `THD=0.1614%`） | 四档导频注入增益全落于 `0.09405–0.09416 V/V`（相对理论 `0.09425` 误差 `<= 0.22%`），`THD(2..10) <= 0.23%` |
-| 静止态 `VA` 谱与离散杂散（`pilot=0`，`2 mV/div` AC，`16` 帧 Welch 平均，`df=20.0 Hz`，`ENBW=30.00 Hz`） | `0 V` 与 `QTP (+4.912 V)` 宽带 RMS / 邻域连续噪底 / 离散杂散 | `0 V`：RMS `3.602 mV`，`1/2 kHz` 邻域中位数 `3.847 / 3.677 µV/√Hz`，杂散 `50 Hz = 1.632 mV_pk`、`1 kHz = 264.8 µV_pk`（`-55.1 dBc`）、`2 kHz = 60.7 µV_pk`（`-67.8 dBc`）、`494.94 kHz = 330.7 µV_pk`；`QTP`：RMS `3.442 mV`，邻域 `3.651 / 3.433 µV/√Hz`，`50 Hz = 1.550 mV_pk`、`1 kHz = 238.7 µV_pk`（`-56.0 dBc`）、`2 kHz = 49.1 µV_pk`（`-69.7 dBc`）、`494.98 kHz = 290.1 µV_pk` | 有效量化离散杂散上界与底板 `U3 LMR51430XF` 约 `495 kHz` 开关基频馈通；因 `SDS824X HD` 配 `10×` 探头连续本底为 `3.43–3.85 µV/√Hz`（高于 `56 nV/√Hz` 热噪声设计值约 `65×`），固有白噪底密度仍受示波器前端限制，有待频谱仪配低噪前置放大器（`FSV30` + LNA）补测 |
+| 双通道 `C48.1 -> VA` 注入相移与传递函数（`DC` 基准，`0 V`，`159.2 / 150.0 mV`，`6` 帧） | 相位 / 相对 `-1` 额外相移 / 延时 / 直测增益 / 源 THD | `159.2 mV`：`total = +158.683°`、**`extra = -21.317° ± 0.004°`**（延时 `59.21 µs`，`f0 = 1000.008 Hz`），`C48.1 = 2.504 V DC ± 1630.21 mV_pk`、`VA = 149.762 mV_pk`、直测增益 `0.09187`（`-2.53%`）、`C48.1 THD = 0.269%`、`VA THD = 0.163%`；`150.0 mV`：**`-21.320° ± 0.005°`**（`59.22 µs`，增益 `0.09187`，`C48.1 = 1535.83 mV_pk, THD = 0.253%`） | 验证反相叠加极性与相移滞后特性；较理论 `-18.753°` / `0.09425` 偏 `-2.56°` / `-2.53%` 处于 `R_f/C_f` 容差及未校准 `1×/10×` 探头分压比误差（`C48.1` 示波器读值较标称 `1592 mV` 高 `+2.40%`）范围内；`12 kΩ ∥ 4.7 nF` 将 `H2` 从 `-51.83 dBc` 进一步滤低至 `-55.94 dBc` |
+| 双通道跨偏压与四档幅度相移平坦度（`AC` 耦合，`AC - DC` 差 `<= 0.006°`） | `-8 ~ +8 V`（`159.2 mV`）与 `84.9 ~ 159.2 mV`（`0 V`） | 跨偏压 `extra = -21.321°`（**全范围峰峰值 `0.0048°`**, `std = 0.0023°`），直测增益 `0.09191`（`ptp = 0.085%`）；四档幅度 `extra = [-21.323°, -21.312°]`（`ptp = 0.011°`），直测增益 `0.09189–0.09193` | 确认 `DAC8568` 直流偏压切换与幅值调节对导频注入相移几乎无寄生扰动（`< 0.011°`），交流/直流耦合间仅差 `-0.006°` |
+| 静止态 `VA` 谱与离散杂散（`pilot=0`，`2 mV/div` AC，`16` 帧 Welch 平均，`df=20.0 Hz`，`ENBW=30.00 Hz`） | `0 V` 与 `QTP (+4.912 V)` 宽带 RMS / 邻域连续噪底 / 离散杂散 | `0 V`：RMS `3.602 mV`，`1/2 kHz` 邻域中位数 `3.847 / 3.677 µV/√Hz`，杂散 `50 Hz = 1.632 mV_pk`、`1 kHz = 264.8 µV_pk`（`-55.1 dBc`）、`2 kHz = 60.7 µV_pk`（`-67.8 dBc`）、`494.94 kHz = 330.7 µV_pk`；`QTP`：RMS `3.442 mV`，邻域 `3.651 / 3.433 µV/√Hz`，`50 Hz = 1.550 mV_pk`、`1 kHz = 238.7 µV_pk`（`-56.0 dBc`）、`2 kHz = 49.1 µV_pk`（`-69.7 dBc`）、`494.98 kHz = 290.1 µV_pk` | 有效量化离散杂散上界与底板 `U3 LMR51430XF` 约 `495 kHz` 开关基频馈通；因 `SDS824X HD` `C1 (1×)` 在 `2 mV/div` 档的连续本底为 `3.43–3.85 µV/√Hz`（高于 `56 nV/√Hz` 热噪声设计值），固有白噪底密度仍受示波器前端限制，有待频谱仪配低噪前置放大器（`FSV30` + LNA）补测 |
 | `0 <-> +500 mV` 直流偏压阶跃（DC 耦合，`0.1 V/div`） | 净跨度 / `t_10_90` / `τ_LP` / `fc` / 过冲 | 上升沿：`+496.76 mV`、`24.20 ms`、**`τ_LP = 11.31 ms`**（`fc = 14.07 Hz`，`-30.7%`）、过冲 `1.17%`、`RMSE = 3.90 mV`；下降沿：`-497.93 mV`、`25.72 ms`、**`τ_LP = 11.24 ms`**（`fc = 14.16 Hz`，`-31.1%`）、过冲 `1.11%`、`RMSE = 4.04 mV` | 实测 `τ_LP` 较名义 `24 kΩ × 0.68 µF = 16.32 ms` 缩短约 `31%`，符合小封装 MLCC 电容（`C51`）直流偏置容值降额与公差特性；因此 C2 锁定的 `T_wait = 60 ms`（`> 5.3 τ_LP`）与 `DC PSI` 等待时长具有更宽建立裕量 |
 
 ### 1.7 需外部仪器补测的 C1 排除项
 
-完成 `DM858E` 直流线性度与 `SDS824X HD` `CN1 VA` 单通道测量后，尚余 3 项（含两项局部遗留项与一项未测项）保留空缺，不用仿真值替代：
+完成 `DM858E` 直流线性度、`SDS824X HD` `CN1 VA` 单通道特征及 `C48.1 -> VA` 双通道相移测量后，`1 kHz` 导频注入幅相与 THD 已完整闭合；尚余 2 项需要外部专用仪器的 C1 指标保留空缺，不用仿真值替代：
 
-1. 偏压电极端 `1 kHz` 导频相对 `DITHER1` 源端的注入相移（预算 `-18.75°`）：单通道探头已实测 `VA` 幅度增益、偏压平坦度与 THD，相移需双通道同步连接 `U10.7 (DITHER1)` 与 `VA` 补测。
-2. 偏压电极端 `1/2 kHz` 固有白噪声密度（预算 `56 nV/√Hz`）：`SDS824X HD` `10×` 探头测得连续本底约 `3.43–3.85 µV/√Hz`（受示波器前端噪底限制），虽已实测离散杂散与 `495 kHz` 馈通，固有白噪底密度仍需 `FSV30` 配低噪前置放大器（LNA）补测。
-3. `+5 V` / `±12 V` / `+3.3 V` 各电源轨实测纹波（`mVpp`）与关键芯片温升（`°C`）：**待外部仪器补测**（需多轨示波器探点与红外热像仪）。
+1. 偏压电极端 `1/2 kHz` 固有白噪声密度（预算 `56 nV/√Hz`）：`SDS824X HD` `C1 (1×)` 在 `2 mV/div` 档测得连续本底约 `3.43–3.85 µV/√Hz`（受示波器前端噪底限制），虽已实测离散杂散与 `495 kHz` 馈通，固有白噪底密度仍需 `FSV30` 配低噪前置放大器（LNA）补测。
+2. `+5 V` / `±12 V` / `+3.3 V` 各电源轨实测纹波（`mVpp`）与关键芯片温升（`°C`）：**待外部仪器补测**（需示波器逐轨探点与红外热像仪）。
 
 ## 2. C2 电光阶跃瞬态、等待窗长、裕量与开环重复性
 
