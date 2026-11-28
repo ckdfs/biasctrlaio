@@ -1,0 +1,30 @@
+{
+  "RF_Off": {
+    "n_tel": 45,
+    "locked": true,
+    "radius": 1.001,
+    "bias_mv": 3955.365,
+    "v_lock_mv": 3955.365,
+    "phi_fwd_thesis_deg": 90.14599187205232,
+    "phi_rev_thesis_deg": 91.97630507506757,
+    "phi_sym_thesis_deg": 91.06114847355994,
+    "e_ctl_fwd_deg": 0.14599187205232314,
+    "e_ctl_sym_deg": 1.0611484735599441,
+    "fwd_rmse_mv": 1.7950038093479028,
+    "rev_rmse_mv": 1.6654005154776241
+  },
+  "RF_9dBm_20MHz": {
+    "n_tel": 45,
+    "locked": true,
+    "radius": 0.693,
+    "bias_mv": 3913.263,
+    "v_lock_mv": 3913.263,
+    "phi_fwd_thesis_deg": 89.96985210778655,
+    "phi_rev_thesis_deg": 91.50727486991093,
+    "phi_sym_thesis_deg": 90.73856348884873,
+    "e_ctl_fwd_deg": -0.03014789221345534,
+    "e_ctl_sym_deg": 0.7385634888487326,
+    "fwd_rmse_mv": 1.8095652151818156,
+    "rev_rmse_mv": 1.644325954317099
+  }
+}

@@ -1,0 +1,36 @@
+{
+  "onboard_cal_vpi_mv": 5378,
+  "onboard_cal_null_mv_fw": -3145,
+  "hw_before_reset": {
+    "desc_crc": "0x61DC009F",
+    "cal_status": 0,
+    "cal_crc": "0xEB285013"
+  },
+  "after_pyocd_reset": {
+    "boot_banner": [
+      "*** Booting Zephyr OS build 41d10b597304 ***",
+      "biasctrl_h503 Phase 7, SYSCLK 250000000 Hz",
+      "analog_board init (20261110-MZM): 0",
+      "oled_lite init: 0",
+      "keys init: 0",
+      "ctrl_thread init: 0",
+      "cli_service start: 0",
+      "Phase 7 CLI ready. Type 'help'."
+    ],
+    "desc_crc": "0x61DC009F",
+    "cal_status": 0,
+    "cal_crc": "0xEB285013",
+    "calibrated": true,
+    "load_err": 0,
+    "vpi_mv": 5378,
+    "null_mv_fw": -3145,
+    "drops": 0,
+    "crc_errs": 0
+  },
+  "comparison_vs_c3_session2_offline": {
+    "offline_vpi_mv": 5408.392,
+    "offline_null_mv_fw": -3195.027,
+    "delta_vpi_mv": -30.392,
+    "delta_null_mv": 50.027
+  }
+}

@@ -1,0 +1,19 @@
+{
+  "disturbance_rf_dbm": 9.0,
+  "disturbance_rf_freq_hz": 20000000.0,
+  "elapsed_trigger_cal_relock_s": 207.38,
+  "recal_count": 1,
+  "final_locked": true,
+  "final_radius": 1.001,
+  "final_bias_mv": 3825.224,
+  "drops": 0,
+  "crc_errs": 0,
+  "v_lock_mv": 3825.224,
+  "phi_fwd_thesis_deg": 88.36991006572367,
+  "phi_rev_thesis_deg": 88.86969722418023,
+  "phi_sym_thesis_deg": 88.61980364495196,
+  "e_ctl_fwd_deg": -1.630089934276331,
+  "e_ctl_sym_deg": -1.3801963550480438,
+  "fwd_rmse_mv": 1.941142211031359,
+  "rev_rmse_mv": 1.489102643049038
+}

@@ -1,0 +1,253 @@
+{
+  "gain_sweep": [
+    {
+      "gain": 0.05,
+      "max_two_period_a2_mrad": 2.443270872623221,
+      "mean_tail_rms_mrad": 55.02902892059617
+    },
+    {
+      "gain": 0.1,
+      "max_two_period_a2_mrad": 1.0413180014895445,
+      "mean_tail_rms_mrad": 6.915438295351953
+    },
+    {
+      "gain": 0.15,
+      "max_two_period_a2_mrad": 0.567903907774297,
+      "mean_tail_rms_mrad": 3.2152131847077525
+    },
+    {
+      "gain": 0.2,
+      "max_two_period_a2_mrad": 1.2722177190732051,
+      "mean_tail_rms_mrad": 2.7545093959859352
+    },
+    {
+      "gain": 0.3,
+      "max_two_period_a2_mrad": 0.9641195190205952,
+      "mean_tail_rms_mrad": 2.543283828286704
+    }
+  ],
+  "method_summaries": {
+    "B1": {
+      "equidistant_16": {
+        "static_rms_rad": 0.6115225589312565,
+        "static_rms_mrad": 611.5225589312565,
+        "static_rms_deg": 35.03766170380116,
+        "max_static_abs_rad": 1.5053574497366735,
+        "max_static_abs_deg": 86.25062852848835,
+        "temporal_rms_rad": 0.875531497658426,
+        "temporal_rms_mrad": 875.531497658426,
+        "temporal_rms_deg": 50.16425964659593,
+        "temporal_p95_rad": 2.9056937869189325,
+        "temporal_p95_deg": 166.48399054784036,
+        "worst_target_p95_rad": 3.0139462398024097,
+        "worst_target_p95_deg": 172.68639922000241,
+        "max_two_period_half_amp_rad": 0.0009603108390241529,
+        "max_two_period_half_amp_mrad": 0.9603108390241529,
+        "pass_count": 8,
+        "n_total": 16,
+        "n_failed": 0,
+        "pass_rate": 0.5
+      },
+      "all_targets": {
+        "static_rms_rad": 0.5784802527706424,
+        "static_rms_mrad": 578.4802527706424,
+        "static_rms_deg": 33.14447701541886,
+        "max_static_abs_rad": 1.5054584340868498,
+        "max_static_abs_deg": 86.25641450555032,
+        "temporal_rms_rad": 0.8275955868422218,
+        "temporal_rms_mrad": 827.5955868422218,
+        "temporal_rms_deg": 47.417734269711914,
+        "temporal_p95_rad": 2.9294666221194956,
+        "temporal_p95_deg": 167.84607367189267,
+        "worst_target_p95_rad": 3.047167790261064,
+        "worst_target_p95_deg": 174.58985385016422,
+        "max_two_period_half_amp_rad": 0.0016979779408979184,
+        "max_two_period_half_amp_mrad": 1.6979779408979185,
+        "pass_count": 14,
+        "n_total": 32,
+        "n_failed": 0,
+        "pass_rate": 0.4375
+      },
+      "n_episodes": 192
+    },
+    "B2": {
+      "equidistant_16": {
+        "static_rms_rad": 0.6845044350026271,
+        "static_rms_mrad": 684.5044350026271,
+        "static_rms_deg": 39.219215183637516,
+        "max_static_abs_rad": 2.017027037146436,
+        "max_static_abs_deg": 115.5671363922679,
+        "temporal_rms_rad": 0.7140727040270561,
+        "temporal_rms_mrad": 714.0727040270561,
+        "temporal_rms_deg": 40.9133522062447,
+        "temporal_p95_rad": 1.9994664862197347,
+        "temporal_p95_deg": 114.56099093824338,
+        "worst_target_p95_rad": 2.0364365493651153,
+        "worst_target_p95_deg": 116.67921952480583,
+        "max_two_period_half_amp_rad": 0.0003493851188649897,
+        "max_two_period_half_amp_mrad": 0.3493851188649897,
+        "pass_count": 10,
+        "n_total": 16,
+        "n_failed": 0,
+        "pass_rate": 0.625
+      },
+      "all_targets": {
+        "static_rms_rad": 0.6402416122232802,
+        "static_rms_mrad": 640.2416122232803,
+        "static_rms_deg": 36.68314224904542,
+        "max_static_abs_rad": 2.017027037146436,
+        "max_static_abs_deg": 115.5671363922679,
+        "temporal_rms_rad": 0.6884551454929915,
+        "temporal_rms_mrad": 688.4551454929915,
+        "temporal_rms_deg": 39.44557422081345,
+        "temporal_p95_rad": 2.0005290944060423,
+        "temporal_p95_deg": 114.62187390259486,
+        "worst_target_p95_rad": 2.3903334301056725,
+        "worst_target_p95_deg": 136.9560171740844,
+        "max_two_period_half_amp_rad": 0.0003493851188649897,
+        "max_two_period_half_amp_mrad": 0.3493851188649897,
+        "pass_count": 22,
+        "n_total": 32,
+        "n_failed": 0,
+        "pass_rate": 0.6875
+      },
+      "n_episodes": 192
+    },
+    "B3": {
+      "equidistant_16": {
+        "static_rms_rad": 1.0997672230537732,
+        "static_rms_mrad": 1099.7672230537733,
+        "static_rms_deg": 63.01202032780381,
+        "max_static_abs_rad": 1.574497753059736,
+        "max_static_abs_deg": 90.21207610315417,
+        "temporal_rms_rad": 1.632480056997921,
+        "temporal_rms_mrad": 1632.4800569979209,
+        "temporal_rms_deg": 93.53421740525694,
+        "temporal_p95_rad": 3.1371254816027028,
+        "temporal_p95_deg": 179.74404989878064,
+        "worst_target_p95_rad": 3.1412872253900113,
+        "worst_target_p95_deg": 179.98250025320823,
+        "max_two_period_half_amp_rad": 0.026724968604352195,
+        "max_two_period_half_amp_mrad": 26.724968604352195,
+        "pass_count": 4,
+        "n_total": 16,
+        "n_failed": 0,
+        "pass_rate": 0.25
+      },
+      "all_targets": {
+        "static_rms_rad": 1.2532481271659455,
+        "static_rms_mrad": 1253.2481271659456,
+        "static_rms_deg": 71.80582836928336,
+        "max_static_abs_rad": 1.5907265468613385,
+        "max_static_abs_deg": 91.14191749457407,
+        "temporal_rms_rad": 1.8269078970939856,
+        "temporal_rms_mrad": 1826.9078970939856,
+        "temporal_rms_deg": 104.67411206260589,
+        "temporal_p95_rad": 3.137009278904196,
+        "temporal_p95_deg": 179.73739197458818,
+        "worst_target_p95_rad": 3.1412872253900113,
+        "worst_target_p95_deg": 179.98250025320823,
+        "max_two_period_half_amp_rad": 1.5381754141824904,
+        "max_two_period_half_amp_mrad": 1538.1754141824904,
+        "pass_count": 4,
+        "n_total": 32,
+        "n_failed": 0,
+        "pass_rate": 0.125
+      },
+      "n_episodes": 192
+    },
+    "B4": {
+      "equidistant_16": {
+        "static_rms_rad": 0.009570971544534904,
+        "static_rms_mrad": 9.570971544534904,
+        "static_rms_deg": 0.5483762753416569,
+        "max_static_abs_rad": 0.015715878274112482,
+        "max_static_abs_deg": 0.9004534964479896,
+        "temporal_rms_rad": 0.009855861702849524,
+        "temporal_rms_mrad": 9.855861702849523,
+        "temporal_rms_deg": 0.5646992790378984,
+        "temporal_p95_rad": 0.01603555060675324,
+        "temporal_p95_deg": 0.9187693719354071,
+        "worst_target_p95_rad": 0.023185659858541183,
+        "worst_target_p95_deg": 1.328440455120299,
+        "max_two_period_half_amp_rad": 0.00039413683339351984,
+        "max_two_period_half_amp_mrad": 0.39413683339351985,
+        "pass_count": 14,
+        "n_total": 16,
+        "n_failed": 0,
+        "pass_rate": 0.875
+      },
+      "all_targets": {
+        "static_rms_rad": 0.011984735470622182,
+        "static_rms_mrad": 11.984735470622182,
+        "static_rms_deg": 0.6866747610473855,
+        "max_static_abs_rad": 0.029373873889978072,
+        "max_static_abs_deg": 1.6829990018452694,
+        "temporal_rms_rad": 0.012192108762788027,
+        "temporal_rms_mrad": 12.192108762788028,
+        "temporal_rms_deg": 0.6985563754722217,
+        "temporal_p95_rad": 0.01962696241217615,
+        "temporal_p95_deg": 1.124542110879599,
+        "worst_target_p95_rad": 0.041824677299053835,
+        "worst_target_p95_deg": 2.396377488732408,
+        "max_two_period_half_amp_rad": 0.00039413683339351984,
+        "max_two_period_half_amp_mrad": 0.39413683339351985,
+        "pass_count": 26,
+        "n_total": 32,
+        "n_failed": 0,
+        "pass_rate": 0.8125
+      },
+      "n_episodes": 192
+    },
+    "AffineFrozen": {
+      "equidistant_16": {
+        "static_rms_rad": 0.012646329817122956,
+        "static_rms_mrad": 12.646329817122956,
+        "static_rms_deg": 0.7245813248515955,
+        "max_static_abs_rad": 0.025113959819126,
+        "max_static_abs_deg": 1.438923904497052,
+        "temporal_rms_rad": 0.012867843737002211,
+        "temporal_rms_mrad": 12.867843737002211,
+        "temporal_rms_deg": 0.737273137564076,
+        "temporal_p95_rad": 0.0191933142525436,
+        "temporal_p95_deg": 1.0996959015390386,
+        "worst_target_p95_rad": 0.03920966899358645,
+        "worst_target_p95_deg": 2.24654854943747,
+        "max_two_period_half_amp_rad": 0.00038529491126173404,
+        "max_two_period_half_amp_mrad": 0.38529491126173404,
+        "pass_count": 14,
+        "n_total": 16,
+        "n_failed": 0,
+        "pass_rate": 0.875
+      },
+      "all_targets": {
+        "static_rms_rad": 0.012994112803516871,
+        "static_rms_mrad": 12.994112803516872,
+        "static_rms_deg": 0.7445078221584227,
+        "max_static_abs_rad": 0.0290838831804056,
+        "max_static_abs_deg": 1.6663837580887628,
+        "temporal_rms_rad": 0.01320141214661369,
+        "temporal_rms_mrad": 13.201412146613691,
+        "temporal_rms_deg": 0.7563851996137049,
+        "temporal_p95_rad": 0.020850372307338674,
+        "temporal_p95_deg": 1.1946383344869542,
+        "worst_target_p95_rad": 0.041457936866921515,
+        "worst_target_p95_deg": 2.375364809794422,
+        "max_two_period_half_amp_rad": 0.00038529491126173404,
+        "max_two_period_half_amp_mrad": 0.38529491126173404,
+        "pass_count": 28,
+        "n_total": 32,
+        "n_failed": 0,
+        "pass_rate": 0.875
+      },
+      "n_episodes": 192
+    }
+  },
+  "onboard_spot_check": {
+    "n_tel_rows": 20,
+    "final_bias_mv": -549.697,
+    "phi_true_thesis_deg": -91.33789956268983,
+    "phi_true_fw_deg": 88.66210043731019,
+    "e_ctl_deg": -1.3378995626898094
+  }
+}
