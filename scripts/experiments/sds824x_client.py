@@ -382,14 +382,13 @@ class SDS824XClient:
         times = t0 + np.arange(npts, dtype=np.float64) * interval
         return times, volts, meta
 
-    def capture_auto_waveform(
+    def _with_frozen_auto_frame(
         self,
-        channel: int = 1,
+        fn: Callable[[], object],
         *,
-        settle_s: float = 0.45,
-        stop_wait_s: float = 0.20,
-    ) -> tuple[np.ndarray, np.ndarray, dict[str, float | int | None]]:
-        """Capture one complete frame under TRMD AUTO (accepting Auto/Trig'd/Arm free-run)."""
+        settle_s: float,
+        stop_wait_s: float,
+    ) -> object:
         self.run_auto()
         w_settle = settle_s * self.settle_scale
         if w_settle > 0:
@@ -401,6 +400,58 @@ class SDS824XClient:
             time.sleep(w_stop)
         self.wait_trigger_status(("Stop",), timeout_s=3.0)
         try:
-            return self.read_stopped_waveform(channel)
+            return fn()
         finally:
             self.run_auto()
+
+    def capture_auto_waveform(
+        self,
+        channel: int = 1,
+        *,
+        settle_s: float = 0.45,
+        stop_wait_s: float = 0.20,
+    ) -> tuple[np.ndarray, np.ndarray, dict[str, float | int | None]]:
+        """Capture one complete frame under TRMD AUTO (accepting Auto/Trig'd/Arm free-run)."""
+        return self._with_frozen_auto_frame(
+            lambda: self.read_stopped_waveform(channel),
+            settle_s=settle_s,
+            stop_wait_s=stop_wait_s,
+        )
+
+    def capture_dual_auto_waveforms(
+        self,
+        ch1: int = 1,
+        ch2: int = 2,
+        *,
+        settle_s: float = 0.45,
+        stop_wait_s: float = 0.20,
+    ) -> tuple[
+        tuple[np.ndarray, np.ndarray, dict[str, float | int | None]],
+        tuple[np.ndarray, np.ndarray, dict[str, float | int | None]],
+    ]:
+        """Freeze one AUTO frame and read two channels from the same acquisition."""
+
+        def _read_pair():
+            t1, v1, meta1 = self.read_stopped_waveform(ch1)
+            t2, v2, meta2 = self.read_stopped_waveform(ch2)
+            if len(t1) == 0 or len(t1) != len(t2):
+                raise SDS824XError(
+                    f"Dual-channel waveform length mismatch: CH{ch1}={len(t1)}, CH{ch2}={len(t2)}"
+                )
+            dt1 = float(meta1["interval"])
+            dt2 = float(meta2["interval"])
+            if abs(dt1 - dt2) > 1e-12:
+                raise SDS824XError(
+                    f"Dual-channel sample interval mismatch: CH{ch1}={dt1}, CH{ch2}={dt2}"
+                )
+            if abs(float(t1[0]) - float(t2[0])) > 1e-9:
+                raise SDS824XError(
+                    f"Dual-channel start time mismatch: CH{ch1}={t1[0]}, CH{ch2}={t2[0]}"
+                )
+            return (t1, v1, meta1), (t2, v2, meta2)
+
+        return self._with_frozen_auto_frame(
+            _read_pair,
+            settle_s=settle_s,
+            stop_wait_s=stop_wait_s,
+        )
