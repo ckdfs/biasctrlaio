@@ -295,6 +295,7 @@ class SimulatedUARTTransport:
             bias_v = bias_mv * 1e-3
             dv = bias_v - self.plant.bias_v
             self.plant.bias_v = bias_v
+            self.plant.pilot_v_cmd = pilot_mv * 1e-3
             self.state = "EXP_HOLD"
             self.plant.seq += wait_b
             self.plant.t_ms += wait_b * 20
@@ -359,6 +360,7 @@ class SimulatedUARTTransport:
         if cmd == "stop":
             self.state = "IDLE"
             self.plant.bias_v = 0.0
+            self.plant.pilot_v_cmd = 0.0
             self._push("stop: ok")
             return
         if cmd in ("save", "load", "reinit"):
